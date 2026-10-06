@@ -260,13 +260,43 @@ function fotoUji(int $lebar = 640, int $tinggi = 480): UploadedFile
 {
     $gambar = ImageManager::gd()->create($lebar, $tinggi);
 
-    for ($i = 0; $i < 140; $i++) {
-        $x = random_int(0, max(1, $lebar - 60));
-        $y = random_int(0, max(1, $tinggi - 60));
+    /*
+     * Citra uji WAJIB deterministik.
+     *
+     * Versi sebelumnya memakai random_int(), sehingga entropi gambar berubah tiap
+     * run. Karena uji BR-29 menuntut hasil kompresi <= 150 KB pada citra ini,
+     * gambarnya kadang LOLOS dan kadang GAGAL tanpa satu baris kode pun berubah —
+     * flaky, dan sempat membuat suite penuh merah sekali lalu hijau pada run
+     * berikutnya.
+     *
+     * Deret acak-semu berbenih tetap menggantikannya: gambarnya tetap "ramai"
+     * (kasus terberat untuk kompresi, sehingga ujinya tetap bermakna dan tidak
+     * jadi lulus palsu), tetapi hasilnya identik setiap kali.
+     */
+    $benih = 20261006;
+    $acak = function (int $min, int $maks) use (&$benih): int {
+        $benih = ($benih * 1103515245 + 12345) & 0x7FFFFFFF;
 
-        $gambar->drawRectangle($x, $y, function ($kotak): void {
-            $kotak->size(random_int(10, 60), random_int(10, 60));
-            $kotak->background(sprintf('rgba(%d,%d,%d,0.8)', random_int(0, 255), random_int(0, 255), random_int(0, 255)));
+        return $min + ($benih % ($maks - $min + 1));
+    };
+
+    /*
+     * Jumlah kotak proporsional terhadap luas. Ini disengaja: uji BR-29 mengunggah
+     * citra 1600x1200 dan menuntut hasil kompresi <= 150 KB, jadi citra ujinya harus
+     * benar-benar sulit dimampatkan. Dengan 140 kotak tetap, sumbernya hanya ~85 KB —
+     * sudah di bawah batas, sehingga uji itu lulus tanpa pernah menguji kompresinya.
+     * Pada kerapatan ini, 1600x1200 menghasilkan sumber ~509 KB (3,4x batas) dan tetap
+     * di bawah batas unggah 1 MB, sedangkan citra kecil tetap ringan.
+     */
+    $jumlah = max(60, intdiv($lebar * $tinggi, 640));
+
+    for ($i = 0; $i < $jumlah; $i++) {
+        $x = $acak(0, max(1, $lebar - 60));
+        $y = $acak(0, max(1, $tinggi - 60));
+
+        $gambar->drawRectangle($x, $y, function ($kotak) use ($acak): void {
+            $kotak->size($acak(10, 60), $acak(10, 60));
+            $kotak->background(sprintf('rgba(%d,%d,%d,0.8)', $acak(0, 255), $acak(0, 255), $acak(0, 255)));
         });
     }
 

@@ -232,10 +232,10 @@ Tanggal: 6 Oktober 2026. Cakupan: FR-JRN-01..10, BR-19..BR-23, BR-26, A-01, A-09
 
 Dua uji teramati gagal secara **bergantung urutan** pada suite penuh, lalu lulus saat berkasnya dijalankan sendiri. Keduanya menyangkut pemrosesan gambar/PDF:
 
-| Uji | Gejala |
-|---|---|
-| `tests/Feature/Fase5/LaporanEksporTest.php:221` (KP-5.2) | Teks kop baru tidak ditemukan pada PDF hasil cetak ulang. Lulus saat berkas dijalankan sendiri. |
-| `tests/Feature/Fase3/PresensiMasukTest.php:253` (BR-29) | Lebar foto hasil unggah > 800 px, padahal seharusnya diperkecil. Lulus 19/19 saat berkas dijalankan sendiri. |
+| Uji | Gejala | Status |
+|---|---|---|
+| `tests/Feature/Fase3/PresensiMasukTest.php:253` (BR-29) | **Ukuran** foto hasil unggah melebihi 150 KB (baris 253 adalah uji ukuran, bukan uji lebar — koreksi dari catatan awal). Lulus saat berkas dijalankan sendiri. | **SELESAI — akar masalah ditemukan dan diperbaiki** (lihat di bawah) |
+| `tests/Feature/Fase5/LaporanEksporTest.php:221` (KP-5.2) | Teks kop baru tidak ditemukan pada PDF hasil cetak ulang. Lulus saat berkas dijalankan sendiri. | Belum — lihat langkah lanjutan |
 
 **Pengukuran:** pada dua run suite penuh berturut-turut di database terpisah, hasilnya `1 failed / 354 passed` lalu `355 passed / 0 failed`. Jumlah uji naik karena pekerjaan Fase 7 masuk di antaranya. Jadi kegagalannya berpindah, bukan menetap — ini nondeterminisme, bukan regresi.
 
@@ -252,3 +252,25 @@ Dua uji teramati gagal secara **bergantung urutan** pada suite penuh, lalu lulus
 4. Baru setelah itu perkuat `teksPdf()` untuk uji KP-5.2.
 
 **Cara memverifikasi terpisah tanpa mengganggu pekerjaan lain** (berguna karena database uji dipakai bersama): buat salinan `phpunit.xml` dengan `DB_DATABASE` berbeda, jalankan `artisan test -c phpunit.<nama>.xml`, lalu hapus salinan dan database itu. Jangan lupa `phpunit.xml` memakai `force="true"` sehingga variabel lingkungan biasa TIDAK dapat menimpanya.
+
+### N.1 SELESAI — akar flaky BR-29: citra uji dibuat acak
+
+`fotoUji()` di `tests/Pest.php` menggambar 140 kotak pada posisi dan warna **acak** (`random_int`). Konten acak berarti entropi gambarnya berubah setiap run, sehingga hasil kompresinya kadang di bawah 150 KB dan kadang tidak — tanpa satu baris kode pun berubah. Uji yang menuntut batas angka keras pada data acak memang cacat desain.
+
+**Diperbaiki** dengan deret acak-semu berbenih tetap (`$benih = 20261006`, LCG), sehingga citranya identik setiap kali.
+
+**Sekaligus ujinya diperkuat.** Versi pertama perbaikan saya hanya mengganti `random_int` → deret berbenih, dan hasilnya stabil tetapi **terlalu longgar**: diukur, sumbernya hanya 87 KB (sudah di bawah batas 150 KB), jadi ujinya lulus tanpa pernah menguji kompresi — sama buruknya dengan flaky. Jumlah kotak kemudian dibuat proporsional terhadap luas (`max(60, intdiv($lebar * $tinggi, 640))`).
+
+Angka terukur sesudah perbaikan (citra 1600x1200 seperti yang dipakai uji BR-29):
+
+| Besaran | Nilai |
+|---|---|
+| Sumber | 520.719 byte (509 KB) — **3,39x batas** |
+| Hasil kompresi | 102.286 byte (99,9 KB) |
+| Batas BR-29 | 150 KB |
+| Margin | 33,4% |
+| Citra kecil (640x480) | 82.114 byte (80 KB) — tetap ringan |
+
+Verifikasi: uji BR-29 dijalankan **tiga kali berturut-turut** → 19 lulus / 72 assertion setiap kali. Suite penuh: 355 lulus / 1449 assertion, Pint bersih 304 berkas.
+
+Pelajaran yang berlaku umum: **citra/berkas uji untuk pengujian kompresi harus deterministik DAN terukur kasus terberatnya.** Uji yang lulus dengan margin 83% pada data acak bukan bukti apa pun.
