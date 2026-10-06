@@ -43,6 +43,16 @@ class AuditLogService
 
     public const AKSI_SELESAI_TAHUN = 'tandai_selesai_tahun_pelajaran';
 
+    public const AKSI_PLOTTING_SISWA = 'plotting_siswa';
+
+    public const AKSI_NAIK_KELAS = 'naik_kelas';
+
+    public const AKSI_MUTASI_KELAS = 'mutasi_kelas';
+
+    public const AKSI_BATAL_NAIK_KELAS = 'batal_naik_kelas';
+
+    public const AKSI_SALIN = 'salin_data';
+
     public function catat(
         string $aksi,
         ?User $user = null,

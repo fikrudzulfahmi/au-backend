@@ -13,6 +13,11 @@ use Illuminate\Database\Seeder;
  * Urutan penting: peran → pegawai (butuh peran) → akun → tahun pelajaran
  * (butuh dikaitkan ke kelas) → jurusan → kelas (butuh pegawai & jurusan) →
  * mapel → siswa.
+ *
+ * Fase 2 melanjutkan setelah master siap: plotting kelas (siswa → kelas) →
+ * plotting mapel (guru pengampu) → pola jam → jadwal contoh tanpa bentrok.
+ * JadwalSeeder dijalankan paling akhir karena ia menyesuaikan `jp_per_minggu`
+ * setiap plotting dengan jumlah JP yang benar-benar terjadwal.
  */
 class DatabaseSeeder extends Seeder
 {
@@ -31,6 +36,12 @@ class DatabaseSeeder extends Seeder
             MapelSeeder::class,
             HariLiburSeeder::class,
             SiswaSeeder::class,
+
+            // ---- Fase 2: plotting & jadwal ----
+            PlottingKelasSeeder::class,
+            PlottingMapelSeeder::class,
+            JamPelajaranSeeder::class,
+            JadwalSeeder::class,
         ]);
     }
 }

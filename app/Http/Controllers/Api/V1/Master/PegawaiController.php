@@ -101,7 +101,11 @@ class PegawaiController extends Controller
     public function import(ImportMasterRequest $request): JsonResponse
     {
         try {
-            $hasil = $this->import->importPegawai($request->file('berkas'), (bool) $request->boolean('buat_akun', true));
+            $hasil = $this->import->importPegawai(
+                $request->file('berkas'),
+                (bool) $request->boolean('buat_akun', true),
+                $request->user(),
+            );
         } catch (\RuntimeException $e) {
             return response()->json([
                 'message' => 'Berkas tidak dapat dibaca: '.$e->getMessage(),

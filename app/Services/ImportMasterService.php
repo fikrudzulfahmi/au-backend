@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Models\Kelas;
 use App\Models\Pegawai;
 use App\Models\Role;
 use App\Models\Siswa;
+use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -34,6 +36,7 @@ class ImportMasterService
     public function __construct(
         private readonly ExcelService $excel,
         private readonly PegawaiService $pegawaiService,
+        private readonly PlottingKelasService $plotting,
     ) {}
 
     /** @return array{total_baris: int, berhasil: int, gagal: int, baris_gagal: array<int, array{baris: int, pesan: string}>} */
@@ -78,7 +81,57 @@ class ImportMasterService
     }
 
     /** @return array{total_baris: int, berhasil: int, gagal: int, baris_gagal: array<int, array{baris: int, pesan: string}>, akun: array<int, array{nip: string, password_awal: string}>} */
-    public function importPegawai(UploadedFile $berkas, bool $buatAkun = true): array
+    /**
+     * FR-PLK-01 — import penempatan siswa: kolom NIS dan nama kelas.
+     * Baris yang kelasnya tidak ditemukan dilaporkan sebagai gagal tanpa menggagalkan
+     * baris lain, sama seperti import master lainnya (KP-1.3).
+     *
+     * @return array{total_baris: int, berhasil: int, gagal: int, baris_gagal: list<array{baris: int, pesan: string}>}
+     */
+    public function importPlottingKelas(UploadedFile $berkas, int $tahunPelajaranId, ?User $oleh = null): array
+    {
+        ['baris' => $baris] = $this->excel->baca($berkas);
+
+        $kelas = Kelas::query()
+            ->where('tahun_pelajaran_id', $tahunPelajaranId)
+            ->get()
+            ->keyBy(fn (Kelas $k): string => strtolower(trim($k->nama)));
+
+        return $this->proses($baris, function (array $isi) use ($kelas, $oleh): string {
+            $nis = $this->teks($isi['nis'] ?? null);
+            $namaKelas = $this->teks($isi['nama_kelas'] ?? null);
+
+            if ($nis === null) {
+                return 'NIS wajib diisi.';
+            }
+
+            if ($namaKelas === null) {
+                return 'Nama kelas wajib diisi.';
+            }
+
+            $siswa = Siswa::where('nis', $nis)->first();
+
+            if ($siswa === null) {
+                return "NIS {$nis} tidak terdaftar pada data siswa.";
+            }
+
+            $kunci = strtolower(trim($namaKelas));
+
+            if (! isset($kelas[$kunci])) {
+                return "Kelas \"{$namaKelas}\" tidak ditemukan pada tahun pelajaran ini.";
+            }
+
+            $hasil = $this->plotting->plotBaru($kelas[$kunci], [$siswa->id], $oleh);
+
+            if ($hasil['dibuat'] === 0) {
+                return $hasil['dilewati'][0]['alasan'] ?? 'Siswa tidak dapat ditempatkan.';
+            }
+
+            return '';
+        });
+    }
+
+    public function importPegawai(UploadedFile $berkas, bool $buatAkun = true, ?User $oleh = null): array
     {
         ['baris' => $baris] = $this->excel->baca($berkas);
         $akun = [];

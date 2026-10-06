@@ -20,16 +20,20 @@ final class ResponsDaftar
 {
     /**
      * @param  class-string<JsonResource>  $kelasResource
+     * @param  array<string, mixed>  $metaTambahan  digabung ke dalam `meta`, mis. semester_id aktif
      */
-    public static function buat(LengthAwarePaginator $paginator, string $kelasResource): JsonResponse
-    {
+    public static function buat(
+        LengthAwarePaginator $paginator,
+        string $kelasResource,
+        array $metaTambahan = [],
+    ): JsonResponse {
         return response()->json([
             'data' => $kelasResource::collection($paginator->items()),
-            'meta' => [
+            'meta' => array_merge([
                 'page' => $paginator->currentPage(),
                 'per_page' => $paginator->perPage(),
                 'total' => $paginator->total(),
-            ],
+            ], $metaTambahan),
         ]);
     }
 }

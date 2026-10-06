@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\AturanBisnisException;
 use App\Http\Middleware\CatatPermintaanApi;
 use App\Http\Middleware\PastikanPeran;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -46,6 +47,24 @@ return Application::configure(basePath: dirname(__DIR__))
                 'message' => 'Data yang dikirim tidak valid.',
                 'errors' => $e->errors(),
             ], 422);
+        });
+
+        // Aturan bisnis (BR-xx/FR-xx) — pesan dan kode spesifik, bukan 500.
+        $exceptions->render(function (AturanBisnisException $e, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            $muatan = [
+                'message' => $e->getMessage(),
+                'code' => $e->kode,
+            ];
+
+            if ($e->galat !== []) {
+                $muatan['errors'] = $e->galat;
+            }
+
+            return response()->json($muatan, $e->getStatusCode());
         });
 
         $exceptions->render(function (AuthenticationException $e, Request $request) {

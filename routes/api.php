@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\V1\Akademik\JadwalController;
+use App\Http\Controllers\Api\V1\Akademik\JamPelajaranController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\Master\HariLiburController;
 use App\Http\Controllers\Api\V1\Master\JurusanController;
@@ -14,6 +16,8 @@ use App\Http\Controllers\Api\V1\Master\TahunPelajaranController;
 use App\Http\Controllers\Api\V1\Pengaturan\AuditLogController;
 use App\Http\Controllers\Api\V1\Pengaturan\PengaturanSekolahController;
 use App\Http\Controllers\Api\V1\Pengaturan\PenggunaController;
+use App\Http\Controllers\Api\V1\Plotting\PlottingKelasController;
+use App\Http\Controllers\Api\V1\Plotting\PlottingMapelController;
 use App\Http\Controllers\Api\V1\PublikSekolahController;
 use App\Http\Controllers\Api\V1\WaktuServerController;
 use Illuminate\Support\Facades\Route;
@@ -132,6 +136,82 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/pengaturan/pengguna/peran', [PenggunaController::class, 'peran']);
             Route::put('/pengaturan/pengguna/{pengguna}', [PenggunaController::class, 'update']);
             Route::post('/pengaturan/pengguna/{pengguna}/reset-perangkat', [PenggunaController::class, 'resetPerangkat']);
+        });
+
+        /* ===================================================================
+         | FASE 2 — Plotting & jadwal (matriks Bagian 2)
+         |
+         | Plotting Kelas        : admin kelola; kepala_sekolah & wakasek lihat.
+         | Plotting Mapel        : admin & wakasek kelola; kepala_sekolah lihat;
+         |                         guru hanya data miliknya (L/S).
+         | Jam pelajaran         : admin & wakasek kelola; kepala_sekolah lihat.
+         | Jadwal pelajaran      : admin & wakasek kelola; kepala_sekolah lihat;
+         |                         guru hanya jadwal miliknya (L/S).
+         |================================================================= */
+
+        /* ------------------------------------------- plotting kelas (FR-PLK) */
+        Route::middleware('peran:admin,kepala_sekolah,wakasek_kurikulum')->group(function (): void {
+            // Rute harfiah didahulukan agar tidak tertukar dengan /plotting-kelas/{id}.
+            Route::get('/plotting-kelas/ringkasan', [PlottingKelasController::class, 'ringkasan']);
+            Route::get('/plotting-kelas/belum-terplot', [PlottingKelasController::class, 'belumTerplot']);
+            Route::get('/plotting-kelas/ekspor', [PlottingKelasController::class, 'ekspor']);
+            Route::get('/plotting-kelas', [PlottingKelasController::class, 'index']);
+            Route::get('/siswa/{siswa}/riwayat-kelas', [PlottingKelasController::class, 'riwayat']);
+        });
+
+        Route::middleware('peran:admin')->group(function (): void {
+            Route::post('/plotting-kelas/import', [PlottingKelasController::class, 'import']);
+            Route::post('/plotting-kelas/wizard/pratinjau', [PlottingKelasController::class, 'wizardPratinjau']);
+            Route::post('/plotting-kelas/wizard/eksekusi', [PlottingKelasController::class, 'wizardEksekusi']);
+            Route::post('/plotting-kelas', [PlottingKelasController::class, 'store']);
+            Route::post('/plotting-kelas/{plottingKelas}/mutasi', [PlottingKelasController::class, 'mutasi']);
+            Route::post('/plotting-kelas/{plottingKelas}/batalkan', [PlottingKelasController::class, 'batalkan']);
+            Route::delete('/plotting-kelas/{plottingKelas}', [PlottingKelasController::class, 'destroy']);
+        });
+
+        /* ------------------------------------------- plotting mapel (FR-PLM) */
+        Route::middleware('peran:admin,kepala_sekolah,wakasek_kurikulum,guru')->group(function (): void {
+            Route::get('/plotting-mapel/matriks', [PlottingMapelController::class, 'matriks']);
+            Route::get('/plotting-mapel/per-guru', [PlottingMapelController::class, 'perGuru']);
+            Route::get('/plotting-mapel/ekspor', [PlottingMapelController::class, 'ekspor']);
+            Route::get('/plotting-mapel', [PlottingMapelController::class, 'index']);
+        });
+
+        Route::middleware('peran:admin,wakasek_kurikulum')->group(function (): void {
+            Route::post('/plotting-mapel/salin', [PlottingMapelController::class, 'salin']);
+            Route::post('/plotting-mapel', [PlottingMapelController::class, 'store']);
+            Route::put('/plotting-mapel/{plottingMapel}', [PlottingMapelController::class, 'update']);
+            Route::delete('/plotting-mapel/{plottingMapel}', [PlottingMapelController::class, 'destroy']);
+        });
+
+        /* ------------------------------------------- jam pelajaran (FR-JAM) */
+        Route::middleware('peran:admin,kepala_sekolah,wakasek_kurikulum')->group(function (): void {
+            Route::get('/jam-pelajaran', [JamPelajaranController::class, 'index']);
+        });
+
+        Route::middleware('peran:admin,wakasek_kurikulum')->group(function (): void {
+            Route::post('/jam-pelajaran/salin', [JamPelajaranController::class, 'salin']);
+            Route::put('/jam-pelajaran/slot/{slotJam}', [JamPelajaranController::class, 'updateSlot']);
+            Route::delete('/jam-pelajaran/slot/{slotJam}', [JamPelajaranController::class, 'destroySlot']);
+            Route::post('/jam-pelajaran/{polaJam}/slot', [JamPelajaranController::class, 'storeSlot']);
+            Route::post('/jam-pelajaran', [JamPelajaranController::class, 'store']);
+            Route::put('/jam-pelajaran/{polaJam}', [JamPelajaranController::class, 'update']);
+            Route::delete('/jam-pelajaran/{polaJam}', [JamPelajaranController::class, 'destroy']);
+        });
+
+        /* ----------------------------------------------- jadwal (FR-JDW) */
+        // FR-JDW-06 — guru melihat jadwal hari ini dan mingguan miliknya.
+        Route::middleware('peran:admin,kepala_sekolah,wakasek_kurikulum,guru')->group(function (): void {
+            Route::get('/jadwal/hari-ini', [JadwalController::class, 'hariIni']);
+            Route::get('/jadwal/mingguan', [JadwalController::class, 'mingguan']);
+            Route::get('/jadwal', [JadwalController::class, 'index']);
+        });
+
+        Route::middleware('peran:admin,wakasek_kurikulum')->group(function (): void {
+            Route::get('/jadwal/ekspor', [JadwalController::class, 'ekspor']);
+            Route::get('/jadwal/peringatan', [JadwalController::class, 'peringatan']);
+            Route::post('/jadwal', [JadwalController::class, 'store']);
+            Route::delete('/jadwal/{jadwal}', [JadwalController::class, 'destroy']);
         });
     });
 });
