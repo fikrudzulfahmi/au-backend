@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  uji:
+    name: Uji, gaya kode, dan rahasia
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: sipandu_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Siapkan PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: curl, fileinfo, gd, intl, mbstring, openssl, pdo_mysql, sqlite3, zip, exif
+          coverage: none
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Pasang dependensi
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Siapkan berkas lingkungan
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Periksa gaya kode (Pint)
+        run: ./vendor/bin/pint --test
+
+      - name: Jalankan uji (Pest)
+        run: php artisan test
+
+      - name: Pastikan tidak ada berkas rahasia yang ikut ter-commit
+        run: |
+          if git ls-files --error-unmatch .env > /dev/null 2>&1; then
+            echo "::error::Berkas .env tidak boleh di-commit."
+            exit 1
+          fi
+          echo "Tidak ada .env yang ter-commit."
