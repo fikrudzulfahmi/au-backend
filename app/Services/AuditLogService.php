@@ -53,6 +53,27 @@ class AuditLogService
 
     public const AKSI_SALIN = 'salin_data';
 
+    // ---- Fase 3: presensi & pengajuan ----
+    public const AKSI_PRESENSI_MASUK = 'presensi_masuk';
+
+    public const AKSI_PRESENSI_PULANG = 'presensi_pulang';
+
+    public const AKSI_KOREKSI_PRESENSI = 'koreksi_presensi';
+
+    public const AKSI_PUTUSKAN_PRESENSI = 'putuskan_presensi_luar_radius';
+
+    public const AKSI_AJUKAN_IZIN = 'ajukan_izin';
+
+    public const AKSI_PUTUSKAN_IZIN = 'putuskan_izin';
+
+    public const AKSI_BATAL_IZIN = 'batalkan_izin';
+
+    public const AKSI_AJUKAN_LUAR_RADIUS = 'ajukan_luar_radius';
+
+    public const AKSI_PUTUSKAN_LUAR_RADIUS = 'putuskan_luar_radius';
+
+    public const AKSI_TETAPKAN_LOKASI = 'tetapkan_lokasi_pegawai';
+
     public function catat(
         string $aksi,
         ?User $user = null,

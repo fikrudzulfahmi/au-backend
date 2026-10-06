@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Models\JamKerja;
 use App\Models\Jurusan;
 use App\Models\Kelas;
+use App\Models\LokasiPresensi;
 use App\Models\Mapel;
 use App\Models\Pegawai;
 use App\Models\PlottingMapel;
@@ -17,6 +19,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
+use Intervention\Image\ImageManager;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
@@ -192,6 +195,122 @@ function semesterGenap(TahunPelajaran $tahun): Semester
             'tanggal_mulai' => $tahun->tanggal_selesai,
             'is_active' => false,
         ]);
+}
+
+/**
+ * Mengirim presensi masuk sebagai pengguna tertentu (multipart, karena ada berkas).
+ *
+ * @param  array<string, mixed>  $tambahan
+ */
+function kirimPresensi(User $user, array $tambahan = [], ?UploadedFile $foto = null)
+{
+    $muatan = array_merge([
+        'foto' => $foto ?? fotoUji(),
+        'lat' => -7.8654000,
+        'lng' => 111.4650000,
+        'akurasi_m' => 10,
+    ], $tambahan);
+
+    return test()->actingAs($user)->post('/api/v1/presensi/masuk', $muatan);
+}
+
+/** Mengirim presensi pulang sebagai pengguna tertentu. */
+function kirimPulang(User $user, array $tambahan = [], ?UploadedFile $foto = null)
+{
+    $muatan = array_merge([
+        'foto' => $foto ?? fotoUji(),
+        'lat' => -7.8654000,
+        'lng' => 111.4650000,
+        'akurasi_m' => 10,
+    ], $tambahan);
+
+    return test()->actingAs($user)->post('/api/v1/presensi/pulang', $muatan);
+}
+
+/**
+ * Senin, 5 Oktober 2026 — hari kerja acuan uji presensi (jam masuk 07:00).
+ * Dipakai bersama agar tidak ada konstanta tingkat berkas yang bisa bentrok
+ * antarberkas uji.
+ */
+function seninUji(): string
+{
+    return '2026-10-05';
+}
+
+/** Sabtu, 10 Oktober 2026 — hari bukan hari kerja. */
+function sabtuUji(): string
+{
+    return '2026-10-10';
+}
+
+/**
+ * Foto uji: JPEG sungguhan (bukan berkas kosong) berisi derau agar ukuran
+ * berkasnya realistis sehingga uji batas BR-29 bermakna.
+ */
+function fotoUji(int $lebar = 640, int $tinggi = 480): UploadedFile
+{
+    $gambar = ImageManager::gd()->create($lebar, $tinggi);
+
+    for ($i = 0; $i < 140; $i++) {
+        $x = random_int(0, max(1, $lebar - 60));
+        $y = random_int(0, max(1, $tinggi - 60));
+
+        $gambar->drawRectangle($x, $y, function ($kotak): void {
+            $kotak->size(random_int(10, 60), random_int(10, 60));
+            $kotak->background(sprintf('rgba(%d,%d,%d,0.8)', random_int(0, 255), random_int(0, 255), random_int(0, 255)));
+        });
+    }
+
+    $path = sys_get_temp_dir().DIRECTORY_SEPARATOR.'sipandu-foto-'.uniqid().'.jpg';
+    file_put_contents($path, (string) $gambar->toJpeg(90));
+
+    return new UploadedFile($path, 'selfie.jpg', 'image/jpeg', null, true);
+}
+
+/**
+ * Rangkaian Fase 3: pegawai guru dengan akun, satu lokasi default aktif,
+ * dan jam kerja Senin–Jumat 07:00–15:00 (sabtu/minggu libur).
+ *
+ * Titik acuan: SMK (lintang -7.8654, bujur 111.4650) dengan radius 150 m.
+ *
+ * @return array{pegawai: Pegawai, user: User, lokasi: LokasiPresensi, koordinat: array{lat: float, lng: float, luar: array{lat: float, lng: float}}}
+ */
+function siapkanPresensi(int $radius = 150): array
+{
+    $lokasi = LokasiPresensi::factory()->default()->create([
+        'nama' => 'SMK Uji',
+        'latitude' => -7.8654000,
+        'longitude' => 111.4650000,
+        'radius_m' => $radius,
+    ]);
+
+    foreach (range(1, 7) as $hari) {
+        $kerja = $hari <= 5;
+
+        JamKerja::factory()->create([
+            'jenis_pegawai' => Pegawai::JENIS_GURU,
+            'hari' => $hari,
+            'is_hari_kerja' => $kerja,
+            'buka_presensi' => $kerja ? '06:30:00' : null,
+            'jam_masuk' => $kerja ? '07:00:00' : null,
+            'jam_pulang' => $kerja ? '15:00:00' : null,
+        ]);
+    }
+
+    $user = buatPegawaiDenganAkun(Pegawai::JENIS_GURU);
+
+    return [
+        'pegawai' => $user->pegawai,
+        'user' => $user,
+        'lokasi' => $lokasi,
+        'koordinat' => [
+            // Di dalam radius: ±10 m dari titik lokasi.
+            'lat' => -7.8654000,
+            'lng' => 111.4650000,
+            // Jauh di luar radius (sekitar 4,4 km).
+            'luar' => ['lat' => -7.9000000, 'lng' => 111.4750000],
+        ],
+    ];
 }
 
 /**

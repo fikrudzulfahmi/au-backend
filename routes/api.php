@@ -18,6 +18,12 @@ use App\Http\Controllers\Api\V1\Pengaturan\PengaturanSekolahController;
 use App\Http\Controllers\Api\V1\Pengaturan\PenggunaController;
 use App\Http\Controllers\Api\V1\Plotting\PlottingKelasController;
 use App\Http\Controllers\Api\V1\Plotting\PlottingMapelController;
+use App\Http\Controllers\Api\V1\Presensi\JamKerjaController;
+use App\Http\Controllers\Api\V1\Presensi\LokasiPresensiController;
+use App\Http\Controllers\Api\V1\Presensi\MonitoringPresensiController;
+use App\Http\Controllers\Api\V1\Presensi\PengajuanIzinController;
+use App\Http\Controllers\Api\V1\Presensi\PengajuanLuarRadiusController;
+use App\Http\Controllers\Api\V1\Presensi\PresensiController;
 use App\Http\Controllers\Api\V1\PublikSekolahController;
 use App\Http\Controllers\Api\V1\WaktuServerController;
 use Illuminate\Support\Facades\Route;
@@ -212,6 +218,74 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/jadwal/peringatan', [JadwalController::class, 'peringatan']);
             Route::post('/jadwal', [JadwalController::class, 'store']);
             Route::delete('/jadwal/{jadwal}', [JadwalController::class, 'destroy']);
+        });
+
+        /* ------------------------------------- presensi pegawai (FR-PRS) */
+        // Bagian 2: presensi milik pegawai (guru/struktural, dan kepsek/wakasek bila
+        // ia juga terhubung ke data pegawai). Akun tanpa data pegawai ditolak oleh
+        // PresensiService dengan pesan yang jelas, bukan 403 yang membingungkan.
+        Route::prefix('presensi')->group(function (): void {
+            Route::get('/hari-ini', [PresensiController::class, 'hariIni']);
+            Route::post('/masuk', [PresensiController::class, 'masuk']);
+            Route::post('/pulang', [PresensiController::class, 'pulang']);
+            Route::get('/riwayat', [PresensiController::class, 'riwayat']);
+
+            // Foto disimpan di disk privat; penyajiannya tetap melewati otorisasi.
+            Route::get('/{presensi}/foto/{sisi}', [PresensiController::class, 'foto'])
+                ->whereIn('sisi', ['masuk', 'pulang']);
+        });
+
+        /* --------------------------------------- pengajuan (FR-IZN) */
+        Route::prefix('pengajuan-izin')->group(function (): void {
+            Route::get('/', [PengajuanIzinController::class, 'index']);
+            Route::post('/', [PengajuanIzinController::class, 'store']);
+            Route::patch('/{pengajuanIzin}/batalkan', [PengajuanIzinController::class, 'batalkan']);
+
+            // FR-IZN-08 — admin membuat pengajuan atas nama pegawai.
+            Route::post('/atas-nama/{pegawai}', [PengajuanIzinController::class, 'storeAtasNama'])
+                ->middleware('peran:admin');
+
+            // FR-IZN-04 — penyetuju: admin atau kepala sekolah.
+            Route::patch('/{pengajuanIzin}/putuskan', [PengajuanIzinController::class, 'putuskan'])
+                ->middleware('peran:admin,kepala_sekolah');
+        });
+
+        Route::prefix('pengajuan-luar-radius')->group(function (): void {
+            Route::get('/', [PengajuanLuarRadiusController::class, 'index']);
+            Route::post('/', [PengajuanLuarRadiusController::class, 'store']);
+            Route::patch('/{pengajuanLuarRadius}/putuskan', [PengajuanLuarRadiusController::class, 'putuskan'])
+                ->middleware('peran:admin,kepala_sekolah');
+        });
+
+        /* ------------------------ monitoring & persetujuan presensi (FR-PRS-10/11/13) */
+        // Lihat: admin, kepala sekolah, wakasek (Bagian 2).
+        Route::middleware('peran:admin,kepala_sekolah,wakasek_kurikulum')->prefix('monitoring')->group(function (): void {
+            Route::get('/presensi-harian', [MonitoringPresensiController::class, 'harian']);
+            Route::get('/presensi-harian/{presensi}', [MonitoringPresensiController::class, 'detail']);
+            Route::get('/persetujuan-presensi', [MonitoringPresensiController::class, 'antrean']);
+        });
+
+        // Memutuskan & mengoreksi: admin dan kepala sekolah.
+        Route::middleware('peran:admin,kepala_sekolah')->group(function (): void {
+            Route::patch('/monitoring/presensi-harian/{presensi}/putuskan', [MonitoringPresensiController::class, 'putuskan']);
+            Route::patch('/monitoring/presensi-harian/{presensi}/koreksi', [MonitoringPresensiController::class, 'koreksi']);
+            Route::post('/monitoring/persetujuan-presensi/massal', [MonitoringPresensiController::class, 'putuskanMassal']);
+        });
+
+        /* ------------------------------- pengaturan lokasi & jam kerja (FR-LOK) */
+        Route::middleware('peran:admin')->prefix('pengaturan/lokasi')->group(function (): void {
+            Route::get('/pegawai', [LokasiPresensiController::class, 'pegawai']);
+            Route::post('/tetapkan', [LokasiPresensiController::class, 'tetapkan']);
+            Route::get('/', [LokasiPresensiController::class, 'index']);
+            Route::post('/', [LokasiPresensiController::class, 'store']);
+            Route::put('/{lokasiPresensi}', [LokasiPresensiController::class, 'update']);
+            Route::patch('/{lokasiPresensi}/default', [LokasiPresensiController::class, 'jadikanDefault']);
+            Route::delete('/{lokasiPresensi}', [LokasiPresensiController::class, 'destroy']);
+        });
+
+        Route::middleware('peran:admin')->prefix('jam-kerja')->group(function (): void {
+            Route::get('/', [JamKerjaController::class, 'index']);
+            Route::post('/', [JamKerjaController::class, 'simpan']);
         });
     });
 });

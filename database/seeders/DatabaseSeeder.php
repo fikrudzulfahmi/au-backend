@@ -18,6 +18,10 @@ use Illuminate\Database\Seeder;
  * plotting mapel (guru pengampu) → pola jam → jadwal contoh tanpa bentrok.
  * JadwalSeeder dijalankan paling akhir karena ia menyesuaikan `jp_per_minggu`
  * setiap plotting dengan jumlah JP yang benar-benar terjadwal.
+ *
+ * Fase 3 menambahkan lokasi presensi dan jam kerja. Keduanya diletakkan setelah
+ * pegawai ada (seeder lokasi menyentuh penanda default yang dipakai BR-12), dan
+ * sebelum apa pun yang membaca jam kerja (BR-15/BR-16/BR-24).
  */
 class DatabaseSeeder extends Seeder
 {
@@ -42,6 +46,12 @@ class DatabaseSeeder extends Seeder
             PlottingMapelSeeder::class,
             JamPelajaranSeeder::class,
             JadwalSeeder::class,
+
+            // ---- Fase 3: presensi & pengajuan ----
+            // Lokasi dulu (menetapkan default BR-12), lalu jam kerja yang menjadi
+            // acuan terlambat/pulang cepat/hari kerja.
+            LokasiPresensiSeeder::class,
+            JamKerjaSeeder::class,
         ]);
     }
 }

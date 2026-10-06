@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -44,6 +45,13 @@ class Pegawai extends Model
             'tanggal_lahir' => 'date',
             'is_active' => 'boolean',
         ];
+    }
+
+    /** FR-LOK-03 — lokasi presensi yang ditetapkan untuk pegawai ini (BR-11). */
+    public function lokasi(): BelongsToMany
+    {
+        return $this->belongsToMany(LokasiPresensi::class, 'pegawai_lokasi', 'pegawai_id', 'lokasi_id')
+            ->withTimestamps();
     }
 
     public function user(): HasOne
