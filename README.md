@@ -10,14 +10,16 @@ untuk repo backend.
   (sumber kebenaran tunggal; Bagian 6 dan 7 bersifat mengikat).
 - Catatan keputusan & penyimpangan: [`CATATAN-KEPUTUSAN.md`](CATATAN-KEPUTUSAN.md).
 
-> Status: **Fase 0, 1, dan 2 selesai.**
+> Status: **Fase 0, 1, 2, dan 3 selesai.**
 > Fase 0 — kerangka dua repo, autentikasi, waktu server, Info Sekolah.
 > Fase 1 — master data (tahun pelajaran/semester/hari libur, jurusan, kelas, siswa, pegawai, mapel),
 > import/export Excel, pengaturan sistem, pengguna & peran, audit log.
 > Fase 2 — plotting kelas (termasuk wizard naik kelas & kelulusan serta mutasi),
 > plotting mapel, pola jam pelajaran, dan jadwal dengan penolakan bentrok.
-> **154 uji Pest lulus (611 assertion).** Rencana fase ada di Bagian 11 dokumen spesifikasi.
-> Untuk melanjutkan ke Fase 3, baca `docs/SERAH-TERIMA-FASE-3.md`.
+> Fase 3 — presensi GPS + foto dengan watermark, luar radius dua jalur, pengajuan
+> izin/sakit/dinas/cuti, monitoring harian, persetujuan, serta pengaturan lokasi & jam kerja.
+> **219 uji Pest lulus (855 assertion).** Rencana fase ada di Bagian 11 dokumen spesifikasi.
+> Untuk melanjutkan ke Fase 4, baca `docs/SERAH-TERIMA-FASE-4.md`.
 
 ---
 
@@ -194,6 +196,29 @@ tests/Feature, tests/Unit      uji Pest
 | GET | `/api/v1/jadwal` · `/peringatan` · `/ekspor` | L / S | FR-JDW-04/05/07 |
 | GET | `/api/v1/jadwal/hari-ini` · `/mingguan` | semua peran | FR-JDW-06 (jadwal milik sendiri) |
 | POST/DELETE | `/api/v1/jadwal` · `/{id}` | K | FR-JDW-01..03, BR-06/07/08/09 |
+
+**Presensi pegawai (Fase 3)** — presensi untuk pegawai yang bersangkutan (`/presensi/*`);
+pengajuan dapat dibuat pegawai, diputuskan admin/kepala sekolah (`FR-IZN-04`); monitoring
+dapat dilihat admin/kepala sekolah/wakasek dan diputuskan admin/kepala sekolah.
+
+| Metode | Jalur | Akses | Keterangan |
+|---|---|---|---|
+| GET | `/api/v1/presensi/hari-ini` | pegawai | Status hari ini + daftar lokasi efektif (BR-12) |
+| POST | `/api/v1/presensi/masuk` · `/pulang` | pegawai | FR-PRS-01/08, BR-10/15/16/17/29 |
+| GET | `/api/v1/presensi/riwayat` | pegawai | FR-PRS-12 |
+| GET | `/api/v1/presensi/{id}/foto/{sisi}` | pemilik / pemantau | Foto dari disk privat |
+| GET/POST | `/api/v1/pengajuan-izin` | pegawai / pemantau | FR-IZN-01/09 |
+| PATCH | `/api/v1/pengajuan-izin/{id}/putuskan` | admin, kepala sekolah | FR-IZN-04 |
+| PATCH | `/api/v1/pengajuan-izin/{id}/batalkan` | pemilik / admin | FR-IZN-03 |
+| POST | `/api/v1/pengajuan-izin/atas-nama/{pegawai}` | admin | FR-IZN-08 |
+| GET/POST | `/api/v1/pengajuan-luar-radius` | pegawai / pemantau | FR-IZN-06 |
+| PATCH | `/api/v1/pengajuan-luar-radius/{id}/putuskan` | admin, kepala sekolah | FR-PRS-11 |
+| GET | `/api/v1/monitoring/presensi-harian` · `/{id}` · `/persetujuan-presensi` | pemantau | FR-PRS-10/11 |
+| PATCH | `/api/v1/monitoring/presensi-harian/{id}/putuskan` | admin, kepala sekolah | FR-PRS-11 (BR-18) |
+| PATCH | `/api/v1/monitoring/presensi-harian/{id}/koreksi` | admin, kepala sekolah | FR-PRS-13 |
+| POST | `/api/v1/monitoring/persetujuan-presensi/massal` | admin, kepala sekolah | Aksi massal |
+| GET/POST/PUT/DELETE | `/api/v1/pengaturan/lokasi` · `/{id}` · `/{id}/default` · `/tetapkan` · `/pegawai` | admin | FR-LOK-01..03 (BR-12) |
+| GET/POST | `/api/v1/jam-kerja` | admin | FR-LOK-04, BR-15/16/24 |
 
 **Pengaturan (Fase 1)** — hanya admin (`FR-SCH-06`).
 

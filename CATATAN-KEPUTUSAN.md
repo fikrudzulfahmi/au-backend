@@ -4,7 +4,7 @@ Dokumen ini mencatat asumsi yang dipakai dan penyimpangan dari
 `spesifikasi-aplikasi-presensi-smk.md`, sesuai Petunjuk Untuk Agent butir 5.
 Asumsi default yang sudah tertulis di Bagian 13 dokumen tidak diulang di sini.
 
-Tanggal: 6 Oktober 2026 · Fase selesai: 0 (kerangka dua repo & UI), 1 (master data & Info Sekolah), 2 (plotting & jadwal)
+Tanggal: 6 Oktober 2026 · Fase selesai: 0 (kerangka dua repo & UI), 1 (master data & Info Sekolah), 2 (plotting & jadwal), 3 (presensi & pengajuan)
 
 ---
 
@@ -109,3 +109,37 @@ Selain bug pada kode baru Fase 2, ada tiga cacat Fase 1 yang baru terlihat ketik
 | Pembatalan naik kelas tidak pernah menghapus baris tujuan | Salah ketik `$asar` (variabel tak dikenal → `null`) | Memakai `$asal`; ditambah uji yang menutupnya |
 | Seeder gagal: `values()` pada Builder | `values()` milik Collection | Ditambah `->get()` |
 | Factory menghasilkan data tak konsisten | Plotting kelas membuat dua kelas berbeda; jadwal memakai id tetap `1` | Factory membangun rangkaian yang sah |
+
+---
+
+## I. Catatan Fase 3 (presensi & pengajuan)
+
+Tanggal: 6 Oktober 2026 · Status: selesai (219 uji backend, 31 uji frontend)
+
+| No | Keputusan | Alasan / dampak |
+|---|---|---|
+| K-34 | BR-12 "hanya satu lokasi default" ditegakkan **database**, bukan hanya layanan, lewat kolom bantu `penanda_default` (1 untuk default, NULL untuk sisanya) pada indeks unik. | MySQL mengizinkan banyak NULL pada indeks unik, sehingga pola ini memberi jaminan "maksimal satu" tanpa tabel tambahan. Diverifikasi langsung: default kedua ditolak (duplikat 1062) sementara lokasi non-default boleh banyak. |
+| K-35 | Presensi **satu baris per pegawai per tanggal** yang memuat kolom masuk dan pulang berdampingan, bukan dua tabel terpisah. | BR-10 (satu masuk, satu pulang per hari) menjadi indeks unik `(pegawai_id, tanggal)`, dan keadaan "pulang tanpa masuk" secara struktural tidak mungkin tersimpan. Status hari itu juga dapat dibaca dengan satu query — penting untuk monitoring harian. |
+| K-36 | Foto presensi disimpan di disk **privat** dan disajikan lewat endpoint berpelindung otorisasi (pemilik atau peran pemantau), bukan URL publik. | Foto wajah pegawai bersifat pribadi dan dipakai pada halaman monitoring. Otorisasi diperiksa per permintaan, dan foto hilang karena retensi dijawab 404 dengan penjelasan, bukan 500. |
+| K-37 | Batas foto presensi memakai setelan `foto_target_maks_kb` (150 KB), **terpisah** dari `MAKS_HASIL_BYTE` milik logo sekolah (300 KB). | BR-29 menyebut 150 KB sedangkan FR-SCH-04 menyebut 300 KB untuk logo. Menyatukan keduanya akan melanggar salah satu; karena itu jalur foto presensi punya penurunan kualitas bertahap dan, bila perlu, penurunan dimensi. |
+| K-38 | Watermark digambar memakai **font bawaan GD** (tanpa berkas TTF di repositori). | Terverifikasi berjalan dan mengubah piksel. Menghindari menambahkan biner font ke repo dan tetap bekerja di Linux produksi. Trade-off: ukuran huruf terbatas; bila kelak perlu lebih besar, tambahkan TTF ke `resources/fonts` dan setel `filename()` pada FontFactory. |
+| K-39 | Akurasi GPS yang lebih buruk dari `gps_max_akurasi_m` **menolak** presensi, tidak diperlakukan sebagai "di luar radius". | Sesuai FR-PRS-06. Perbedaannya penting: luar radius adalah persoalan izin (dapat ditinjau admin), sedangkan akurasi buruk adalah persoalan teknis yang harus dicoba lagi — mencampurnya akan membuat antrean persetujuan penuh oleh presensi yang sebenarnya bisa dikirim ulang. |
+| K-40 | Presensi pada hari **bukan hari kerja** atau hari libur ditolak dengan pesan jelas. | Jam kerja (FR-LOK-04) hanya bermakna bila hari kerja benar-benar ditegakkan; tanpa ini, perhitungan alpa dan kepatuhan menjadi tidak konsisten. Admin tetap dapat mengoreksi bila ada keadaan khusus (FR-PRS-13). |
+| K-41 | Pengajuan luar radius disimpan **satu baris per tanggal**, bukan rentang. | Membuat BR-17 Jalur A deterministik: pencocokan pengajuan dengan presensi cukup satu pencarian `(pegawai_id, tanggal)` dan dijaga indeks unik. Rentang dari dinas (FR-IZN-02) dipecah per hari kerja saat persetujuan. |
+| K-42 | Penurunan pengajuan luar radius dari dinas yang disetujui dilakukan **saat persetujuan**, dan `updateOrCreate` agar aman diulang. | Persetujuan dapat dilakukan ulang atau diperbaiki; `updateOrCreate` mencegah galat duplikat. Menolak dinas membatalkan turunan yang sudah terlanjur disetujui. |
+| K-43 | Status hadir/terlambat dihitung **saat presensi dikirim** dan disimpan, bukan dihitung ulang saat keputusan. | BR-18. Diuji khusus: presensi terlambat 30 menit tetap terlambat 30 menit setelah admin menyetujui. |
+| K-44 | Presensi yang **ditolak** boleh dikirim ulang pada hari yang sama; rekaman lama tercatat di `audit_log`. | FR-PRS-07 menyebut perilaku ini eksplisit. Baris tetap satu (BR-10), hanya isinya diganti, dan foto lama dihapus agar tidak menumpuk. |
+| K-45 | Kategori monitoring dihitung **saat diminta**, tidak disimpan. | Status dapat berubah tanpa aksi apa pun (mis. tenggat pulang terlewat), sehingga nilai tersimpan akan cepat basi. Perhitungan ulang juga menjadi sumber tunggal kebenaran dengan laporan pada Fase 5 (BR-37). |
+| K-46 | Batas L/S untuk foto presensi dan monitoring ditegakkan di **server**, bukan hanya menyembunyikan menu. | Guru hanya melihat jadwal dan plotting miliknya (Fase 2) dan hanya foto presensinya sendiri di sini; peran pemantau (admin/kepsek/wakasek) yang boleh melihat foto pegawai lain. |
+
+### Bug yang ditemukan dan diperbaiki pada Fase 3
+
+| Bug | Akar masalah | Perbaikan |
+|---|---|---|
+| `GET /jam-kerja` gagal **500** pada database tanpa baris jam kerja | Akses offset pada Collection **melempar galat** bila kunci tidak ada (`Collection::offsetGet`), sehingga `?->` tidak menolong — galatnya terjadi saat pengambilan kunci | Diganti `->get($kunci)` |
+| Koreksi presensi admin **tidak pernah berefek** | `array_keys($model->getFillable())` menghasilkan indeks 0,1,2… sedangkan `getFillable()` sudah berupa daftar nama kolom, sehingga tidak ada kolom yang lolos | Memakai `getFillable()` langsung |
+| Presensi `valid` bisa salah dikategori sebagai "luar radius" | Kategori disimpulkan dari `lokasi_id` kosong, padahal presensi valid selalu punya lokasi | Disimpulkan dari validasi `disetujui` + lokasi kosong |
+| Seluruh unggahan multipart berisiko rusak | `api.ts` menyetel `Content-Type: application/json` sebagai header bawaan, yang ikut terkirim pada FormData sehingga boundary peramban tidak dipakai | Interceptor melepas `Content-Type` saat data berupa FormData |
+| `drawRectangle` gagal | Tanda tangan Intervention v3 adalah `($x, $y, $init)`; lebar/tinggi diatur di dalam closure, bukan argumen terpisah | Disusun ulang sesuai API v3 |
+| Relasi `Pegawai::lokasi()` meledak saat dipanggil | `BelongsToMany` dipakai tanpa diimpor (laten: tipe parameter baru diperiksa saat dipakai) | Impor ditambahkan |
+| Halaman presensi menampilkan "Bukan hari kerja" saat permintaan gagal | Penanda hari diperiksa dengan `!data?.is_hari_kerja`, sehingga data yang tidak ada tampil seolah hari libur | Dijaga `data !== undefined` dan keadaan gagal dijelaskan apa adanya |
