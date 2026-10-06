@@ -22,3 +22,6 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Log uji dari CI (dibuat ci.yml, tidak boleh ikut ter-commit)
+uji.log

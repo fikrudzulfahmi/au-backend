@@ -54,7 +54,29 @@ jobs:
         run: ./vendor/bin/pint --test
 
       - name: Jalankan uji (Pest)
-        run: php artisan test
+        run: |
+          set +e
+          php artisan test --colors=never > uji.log 2>&1
+          kode=$?
+
+          tail -40 uji.log
+
+          # Kegagalan disalin ke ANOTASI, bukan hanya ke log.
+          #
+          # Tanpa ini, CI merah hanya memperlihatkan "proses keluar dengan kode 1",
+          # dan uji mana yang gagal harus digali dari log yang panjang. Anotasi
+          # membuat penyebabnya langsung terbaca dari halaman Actions.
+          if [ "$kode" -ne 0 ]; then
+            echo "::error::Suite uji GAGAL. Nama uji yang gagal dan ringkasannya disalin ke anotasi berikut."
+
+            grep -aE "Tests:|FAILED|ERRORS|Exception|Error:|⨯" uji.log \
+              | head -12 \
+              | while IFS= read -r baris; do
+                  echo "::error::${baris}"
+                done
+          fi
+
+          exit "$kode"
 
       - name: Pastikan tidak ada berkas rahasia yang ikut ter-commit
         run: |
