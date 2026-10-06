@@ -235,7 +235,7 @@ Dua uji teramati gagal secara **bergantung urutan** pada suite penuh, lalu lulus
 | Uji | Gejala | Status |
 |---|---|---|
 | `tests/Feature/Fase3/PresensiMasukTest.php:253` (BR-29) | **Ukuran** foto hasil unggah melebihi 150 KB (baris 253 adalah uji ukuran, bukan uji lebar — koreksi dari catatan awal). Lulus saat berkas dijalankan sendiri. | **SELESAI — akar masalah ditemukan dan diperbaiki** (lihat di bawah) |
-| `tests/Feature/Fase5/LaporanEksporTest.php:221` (KP-5.2) | Teks kop baru tidak ditemukan pada PDF hasil cetak ulang. Lulus saat berkas dijalankan sendiri. | Belum — lihat langkah lanjutan |
+| `tests/Feature/Fase5/LaporanEksporTest.php:91` (KP-5.1 ekspor PDF) | Teks hasil ekstraksi PDF tidak memuat judul laporan. Muncul lagi saat verifikasi suite penuh (`1 gagal / 354 lulus`). Lulus saat berkas dijalankan sendiri. | **Diperbaiki secara struktur — penyebab pasti belum terbukti** (lihat N.2) |
 
 **Pengukuran:** pada dua run suite penuh berturut-turut di database terpisah, hasilnya `1 failed / 354 passed` lalu `355 passed / 0 failed`. Jumlah uji naik karena pekerjaan Fase 7 masuk di antaranya. Jadi kegagalannya berpindah, bukan menetap — ini nondeterminisme, bukan regresi.
 
@@ -274,3 +274,18 @@ Angka terukur sesudah perbaikan (citra 1600x1200 seperti yang dipakai uji BR-29)
 Verifikasi: uji BR-29 dijalankan **tiga kali berturut-turut** → 19 lulus / 72 assertion setiap kali. Suite penuh: 355 lulus / 1449 assertion, Pint bersih 304 berkas.
 
 Pelajaran yang berlaku umum: **citra/berkas uji untuk pengujian kompresi harus deterministik DAN terukur kasus terberatnya.** Uji yang lulus dengan margin 83% pada data acak bukan bukti apa pun.
+
+### N.2 KP-5.1 — parsing PDF dibuat kokoh, tetapi penyebab flaky BELUM terbukti
+
+`teksPdf()` (helper uji) membaca teks dari berkas PDF yang dikompresi dompdf. Versi lamanya memakai **dua regex atas data biner**: satu untuk memotong `stream ... endstream`, satu untuk mengambil literal `( ... )`. Keduanya diganti dengan penelusuran offset byte dan penelusuran karakter yang tidak memakai regex sama sekali, sehingga kelas kerapuhan itu hilang: tidak ada batas *backtrack*, tidak ada salah tafsir pada byte biner, dan tanda kurung bersarang serta escape ditangani benar.
+
+**Dua hipotesis saya DIUJI dan DIBANTAH oleh pengukuran** — penting dicatat supaya tidak diulang:
+
+| Hipotesis | Cara uji | Hasil |
+|---|---|---|
+| Regex pemotong aliran menabrak batas *backtrack* PCRE | Jalankan regex lama atas PDF sungguhan (28.030 byte) sambil memeriksa `preg_last_error()` | **terbantah** — 7 aliran cocok, `preg_last_error = 0`, 0,16 ms |
+| Regex pengambil literal menabrak batas *backtrack* atas 312 KB isi yang sudah dikembangkan | Jalankan regex lama atas isi tergabung, 40 kali ulangan | **terbantah** — 205 kecocokan, `preg_last_error = 0`, 0 gagal, 0 kosong dari 40 kali |
+
+**Petunjuk yang tersisa dan belum diuji.** Keluaran kegagalan memperlihatkan teks hasil ekstraksi dipenuhi byte `0x3F` (`?`) — pola khas `mb_strtoupper(..., 'UTF-8')` yang mengganti byte tidak sah UTF-8. Artinya pada run yang gagal, sebagian isi bukan teks melainkan byte biner mentah: ada aliran yang gagal dikembangkan lalu ikut terbaca. Dugaan berikutnya: `gzuncompress`/`gzinflate` sesekali gagal karena rentang aliran yang tertangkap tidak persis (mis. perbedaan akhir baris), dan itu bergantung pada isi PDF yang berubah tiap pencetakan karena memuat tanggal pembuatan.
+
+**Status:** perbaikan struktural sudah masuk dan suite hijau (355 lulus / 1449 assertion, Pint 304 berkas), tetapi karena penyebab pastinya belum terbukti, **flaky ini bisa muncul lagi**. Bila muncul, langkah pertama: cetak `strlen($urai)` per aliran pada run yang gagal, dan bandingkan jumlah aliran yang berhasil dikembangkan antara run hijau dan run merah.

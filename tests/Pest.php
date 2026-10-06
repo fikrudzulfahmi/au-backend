@@ -650,11 +650,43 @@ function penandatangan(array $atribut = []): Penandatangan
  */
 function teksPdf(string $pdf): string
 {
-    preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $pdf, $cocok);
-
     $isi = '';
+    $pos = 0;
 
-    foreach ($cocok[1] as $aliran) {
+    /*
+     * Aliran dipindai lewat offset byte, BUKAN regex.
+     *
+     * Versi sebelumnya memakai `/stream\r?\n(.*?)\r?\nendstream/s` atas data biner
+     * berukuran puluhan kilobyte. Regex malas seperti itu dapat menabrak batas
+     * backtrack PCRE dan gagal DIAM-DIAM (nilainya `false`, tidak diperiksa),
+     * sementara ukuran PDF berubah sedikit tiap pencetakan karena ia memuat tanggal
+     * pembuatan. Akibatnya ekstraksi kadang utuh dan kadang kosong — uji KP-5.1
+     * flaky: gagal sekali lalu lulus pada run berikutnya tanpa kode berubah.
+     */
+    while (($awal = strpos($pdf, 'stream', $pos)) !== false) {
+        // 'endstream' juga memuat kata 'stream'; jangan memulai aliran di tengahnya.
+        if (substr($pdf, max(0, $awal - 3), 3) === 'end') {
+            $pos = $awal + 6;
+
+            continue;
+        }
+
+        $mulai = $awal + 6;
+
+        if (substr($pdf, $mulai, 2) === "\r\n") {
+            $mulai += 2;
+        } elseif (substr($pdf, $mulai, 1) === "\n") {
+            $mulai += 1;
+        }
+
+        $akhir = strpos($pdf, 'endstream', $mulai);
+
+        if ($akhir === false) {
+            break;
+        }
+
+        $aliran = rtrim(substr($pdf, $mulai, $akhir - $mulai), "\r\n");
+
         $urai = @gzuncompress($aliran);
 
         if ($urai === false) {
@@ -664,18 +696,81 @@ function teksPdf(string $pdf): string
         if ($urai !== false) {
             $isi .= $urai."\n";
         }
+
+        $pos = $akhir + 9;
     }
 
-    // Ambil seluruh literal teks PDF: ( ... ) Tj / TJ.
-    preg_match_all('/\((?:\\\\.|[^()\\\\])*\)/s', $isi, $literal);
+    return ambilLiteralTeksPdf($isi);
+}
 
+/**
+ * Mengambil seluruh literal teks `( ... )` dari aliran PDF yang sudah dikembangkan.
+ *
+ * Ditelusuri karakter per karakter, bukan dengan regex, karena isinya biner dan
+ * literal dapat memuat tanda kurung bersarang maupun escape (`\(`, `\)`, `\\`).
+ * Byte 0x00 dibuang karena dompdf menulis teksnya sebagai UTF-16BE, sehingga setiap
+ * huruf ASCII didahului satu byte kosong.
+ */
+function ambilLiteralTeksPdf(string $isi): string
+{
     $teks = '';
+    $panjang = strlen($isi);
+    $i = 0;
 
-    foreach ($literal[0] as $l) {
-        $isiLiter = substr($l, 1, -1);
-        $isiLiter = str_replace(['\\(', '\\)', '\\\\'], ['(', ')', '\\'], $isiLiter);
-        // UTF-16BE: setiap ASCII didahului byte 0x00 — buang byte kosongnya.
-        $teks .= str_replace("\x00", '', $isiLiter).' ';
+    while ($i < $panjang) {
+        if ($isi[$i] !== '(') {
+            $i++;
+
+            continue;
+        }
+
+        $dalam = 1;
+        $buf = '';
+        $i++;
+
+        while ($i < $panjang && $dalam > 0) {
+            $c = $isi[$i];
+
+            if ($c === '\\') {
+                $berikut = $isi[$i + 1] ?? '';
+
+                if ($berikut === '(' || $berikut === ')' || $berikut === '\\') {
+                    $buf .= $berikut;
+                }
+
+                $i += 2;
+
+                continue;
+            }
+
+            if ($c === '(') {
+                $dalam++;
+                $buf .= $c;
+                $i++;
+
+                continue;
+            }
+
+            if ($c === ')') {
+                $dalam--;
+
+                if ($dalam === 0) {
+                    $i++;
+
+                    break;
+                }
+
+                $buf .= $c;
+                $i++;
+
+                continue;
+            }
+
+            $buf .= $c;
+            $i++;
+        }
+
+        $teks .= str_replace("\x00", '', $buf).' ';
     }
 
     return $teks;
