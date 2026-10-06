@@ -10,11 +10,14 @@ untuk repo backend.
   (sumber kebenaran tunggal; Bagian 6 dan 7 bersifat mengikat).
 - Catatan keputusan & penyimpangan: [`CATATAN-KEPUTUSAN.md`](CATATAN-KEPUTUSAN.md).
 
-> Status: **Fase 0 dan Fase 1 selesai.**
+> Status: **Fase 0, 1, dan 2 selesai.**
 > Fase 0 — kerangka dua repo, autentikasi, waktu server, Info Sekolah.
 > Fase 1 — master data (tahun pelajaran/semester/hari libur, jurusan, kelas, siswa, pegawai, mapel),
 > import/export Excel, pengaturan sistem, pengguna & peran, audit log.
-> 94 uji Pest lulus (356 assertion). Rencana fase ada di Bagian 11 dokumen spesifikasi.
+> Fase 2 — plotting kelas (termasuk wizard naik kelas & kelulusan serta mutasi),
+> plotting mapel, pola jam pelajaran, dan jadwal dengan penolakan bentrok.
+> **154 uji Pest lulus (611 assertion).** Rencana fase ada di Bagian 11 dokumen spesifikasi.
+> Untuk melanjutkan ke Fase 3, baca `docs/SERAH-TERIMA-FASE-3.md`.
 
 ---
 
@@ -166,6 +169,31 @@ tests/Feature, tests/Unit      uji Pest
 | GET | `/api/v1/pegawai/template` · `/pegawai/ekspor` | K | FR-PEG-03 |
 | POST | `/api/v1/pegawai/import` | K | FR-PEG-03 / KP-1.3 |
 | GET | `/api/v1/mapel/ekspor` | K | FR-MPL-02 |
+
+**Plotting & akademik (Fase 2)** — `L` = admin, kepala sekolah, wakasek; `K` = admin
+(plotting kelas) atau admin + wakasek (plotting mapel, jam, jadwal); `S` = data sendiri (guru).
+
+| Metode | Jalur | Akses | Keterangan |
+|---|---|---|---|
+| GET | `/api/v1/plotting-kelas` · `/ringkasan` · `/belum-terplot` | L | FR-PLK-08 |
+| GET | `/api/v1/plotting-kelas/ekspor` | L | FR-PLK-09 |
+| GET | `/api/v1/siswa/{id}/riwayat-kelas` | L | FR-PLK-08 |
+| POST | `/api/v1/plotting-kelas` | K | FR-PLK-01 (dapat massal) |
+| POST | `/api/v1/plotting-kelas/import` | K | FR-PLK-01 (NIS + nama kelas) |
+| POST | `/api/v1/plotting-kelas/{id}/mutasi` | K | FR-PLK-05 (alasan wajib) |
+| POST | `/api/v1/plotting-kelas/{id}/batalkan` | K | FR-PLK-06 |
+| DELETE | `/api/v1/plotting-kelas/{id}` | K | Keluarkan siswa dari kelas |
+| POST | `/api/v1/plotting-kelas/wizard/pratinjau` | K | FR-PLK-02 (status bawaan + saran kelas) |
+| POST | `/api/v1/plotting-kelas/wizard/eksekusi` | K | FR-PLK-02/03 (transaksional, idempotent) |
+| GET | `/api/v1/plotting-mapel` · `/matriks` · `/per-guru` · `/ekspor` | L / S | FR-PLM-04 |
+| POST/PUT/DELETE | `/api/v1/plotting-mapel` · `/{id}` | K | FR-PLM-01..03, BR-03 |
+| POST | `/api/v1/plotting-mapel/salin` | K | FR-PLM-05 |
+| GET | `/api/v1/jam-pelajaran` | L | FR-JAM-01 |
+| POST/PUT/DELETE | `/api/v1/jam-pelajaran` · `/{id}` · `/slot/{id}` | K | FR-JAM-02..05, BR-05 |
+| POST | `/api/v1/jam-pelajaran/salin` | K | FR-JAM-04 |
+| GET | `/api/v1/jadwal` · `/peringatan` · `/ekspor` | L / S | FR-JDW-04/05/07 |
+| GET | `/api/v1/jadwal/hari-ini` · `/mingguan` | semua peran | FR-JDW-06 (jadwal milik sendiri) |
+| POST/DELETE | `/api/v1/jadwal` · `/{id}` | K | FR-JDW-01..03, BR-06/07/08/09 |
 
 **Pengaturan (Fase 1)** — hanya admin (`FR-SCH-06`).
 

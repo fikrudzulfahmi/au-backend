@@ -4,7 +4,7 @@ Dokumen ini mencatat asumsi yang dipakai dan penyimpangan dari
 `spesifikasi-aplikasi-presensi-smk.md`, sesuai Petunjuk Untuk Agent butir 5.
 Asumsi default yang sudah tertulis di Bagian 13 dokumen tidak diulang di sini.
 
-Tanggal: 6 Oktober 2026 · Fase selesai: 0 (kerangka dua repo & UI) dan 1 (master data & Info Sekolah)
+Tanggal: 6 Oktober 2026 · Fase selesai: 0 (kerangka dua repo & UI), 1 (master data & Info Sekolah), 2 (plotting & jadwal)
 
 ---
 
@@ -77,3 +77,35 @@ Tanggal: 6 Oktober 2026 · Status: selesai (94 uji backend, 24 uji frontend)
 | Tahun 4 digit (mis. `2024`) pada import tersimpan sebagai **1905-07-18** | Nilai `2024` berada di dalam rentang serial tanggal Excel (1..2958465), sehingga dibaca sebagai serial | `ExcelService::normalisasiTanggal()` tidak lagi menafsirkan bilangan bulat 1900–2100 sebagai serial; tahun dibaca lebih dahulu, dan angka 8 digit (mis. `20240517`) diperlakukan sebagai `Ymd` |
 | Password awal hasil import pegawai selalu kosong | `PegawaiService::buat()` sudah membuat akun, lalu `buatAkun()` dipanggil lagi dan mengembalikan `password_awal = null` | Akun dibuat setelah pegawai tersimpan, sehingga password awalnya dapat dilaporkan |
 | Nama tahun pelajaran pada factory dapat bertabrakan | `nama` dibuat acak dari rentang tahun yang sama | Factory memakai penghitung berurutan agar `nama` selalu unik |
+
+---
+
+## H. Catatan Fase 2 (plotting & jadwal)
+
+Tanggal: 6 Oktober 2026 · Status: selesai (154 uji backend, 31 uji frontend)
+
+| No | Keputusan | Alasan / dampak |
+|---|---|---|
+| K-26 | Aturan bentrok ditegakkan **berlapis**: validasi aplikasi + indeks unik database. | Aplikasi menghasilkan pesan yang menyebut pelaku bentroknya ("Bentrok guru: X sudah mengajar Y di Z"), sedangkan indeks unik menutup celah balapan dua permintaan bersamaan. `QueryException` duplikat tetap diterjemahkan menjadi pesan yang dapat dibaca, bukan 500. |
+| K-27 | Pratinjau wizard menghitung **status akhir bawaan dan saran kelas tujuan di server**. | Aturan tingkat (X/XI → naik_kelas, XII → lulus) dan saran "+1 tingkat, jurusan sama" adalah aturan bisnis, jadi harus satu sumber. Frontend hanya menyajikan, tidak menghitung. |
+| K-28 | Idempotensi wizard bertumpu pada `status_akhir` baris asal dan keberadaan baris plotting di tahun tujuan. | Setiap keputusan diperiksa lebih dulu; siswa yang sudah diproses dilewati dan dilaporkan, bukan digandakan atau digagalkan. Penanda "kelas selesai" dihitung dari ada/tidaknya siswa yang masih `berjalan`, sehingga tidak perlu tabel status tambahan. |
+| K-29 | `pegawai_id` dan `kelas_id` pada `jadwal` didenormalisasi dari plotting (sesuai 7.3 catatan) dan **ikut diperbarui** ketika pengampu plotting diubah. | Tanpa itu, mengganti guru pengampu akan meninggalkan jadwal lama pada guru sebelumnya sehingga pengecekan bentrok (BR-06) menjadi salah. Ini diuji secara khusus. |
+| K-30 | FR-PLK-06 (batalkan naik kelas) memakai `PenjagaHapus` seperti penjaga fase sebelumnya. | Aturan "selama tahun tujuan belum punya jurnal bagi siswa itu" mengacu ke tabel Fase 4. Dengan pola ini pembatalan otomatis tertutup begitu `presensi_siswa` dibuat, tanpa mengubah kode. |
+| K-31 | Batas L/S guru ditegakkan **di server**, bukan hanya menyembunyikan menu. | Guru tidak dapat melihat jadwal/plotting guru lain, termasuk ketika mencoba mengirim `pegawai_id` milik orang lain — parameter itu diabaikan dan diganti dengan data pegawai miliknya sendiri. |
+| K-32 | Seeder jadwal menyusun jadwal dengan offset per (hari, slot) sehingga tidak mungkin bentrok, lalu menyetel `jp_per_minggu` dari jumlah JP yang benar-benar terjadwal. | Karena setiap mapel diampu tepat satu guru, memutar indeks mapel per kelas menjamin BR-06 dan BR-07 aman sejak data awal. Menyetel JP dari hasil nyata membuat BR-09 dan FR-JDW-07 konsisten (tidak ada peringatan palsu). |
+| K-33 | Rute `/plotting/kelas/mutasi` menampilkan halaman Plotting Kelas yang sama. | Mutasi adalah tindakan per siswa (tombol pada baris daftar), bukan layar tersendiri. Halaman terpisah hanya akan menduplikasi daftar yang sama. |
+
+### Bug yang ditemukan dan diperbaiki pada Fase 2
+
+Selain bug pada kode baru Fase 2, ada tiga cacat Fase 1 yang baru terlihat ketika dipakai:
+
+| Bug | Akar masalah | Perbaikan |
+|---|---|---|
+| `meta` tambahan di respons daftar tidak pernah sampai ke klien | `ResponsDaftar::buat()` hanya menerima 2 argumen; PHP tidak mengeluh kelebihan argumen, jadi argumen ketiga dibuang diam-diam | Ditambahkan parameter `$metaTambahan` |
+| `ImportMasterService` memakai tipe `?User` tanpa mengimpor `User` | Tipe parameter diselesaikan lambat; selama selalu `null` tidak pernah meledak | `use App\Models\User;` ditambahkan |
+| Pelaku import pegawai tidak tercatat di `audit_log` | Controller tidak mengirim `$oleh`, sehingga nilainya `null` | Controller mengirim `$request->user()` |
+| Filter plotting ambigu setelah join | `tahun_pelajaran_id` ada di `plotting_kelas` dan `kelas` → MySQL 1052 | Kolom dikualifikasi dengan nama tabel |
+| `$semester->label` melempar galat resolusi relasi | `label` adalah **method**, bukan kolom | Memakai `$semester->label()` |
+| Pembatalan naik kelas tidak pernah menghapus baris tujuan | Salah ketik `$asar` (variabel tak dikenal → `null`) | Memakai `$asal`; ditambah uji yang menutupnya |
+| Seeder gagal: `values()` pada Builder | `values()` milik Collection | Ditambah `->get()` |
+| Factory menghasilkan data tak konsisten | Plotting kelas membuat dua kelas berbeda; jadwal memakai id tetap `1` | Factory membangun rangkaian yang sah |
