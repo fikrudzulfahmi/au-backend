@@ -202,3 +202,13 @@ Tanggal: 6 Oktober 2026. Cakupan: FR-JRN-01..10, BR-19..BR-23, BR-26, A-01, A-09
 
 - Halaman isi jurnal menandai sesi lewat URL `:sesi` = `plottingMapelId-jamKeMulai` + query `?tanggal=`; penanda ini **dicocokkan ke jadwal server**, jadi halaman tidak pernah mengarang sesi (FR-JRN-06).
 - `labelJamKe()` pada model dan `labelJamKe()` pada layanan sengaja ada di dua tempat: yang pertama untuk jurnal tersimpan, yang kedua untuk sesi yang belum tersimpan.
+
+---
+
+## M. Perbaikan Fase 5 lanjutan (temuan uji asap)
+
+| No | Temuan | Akar masalah & perbaikan |
+|---|---|---|
+| K-85 | **Ekspor Excel terunduh bernama `.pdf`.** Pengguna mengira berkasnya rusak. | CORS hanya membuka header *safelisted* kepada JavaScript; `Content-Disposition` bukan salah satunya, sehingga frontend selalu gagal membaca nama berkas dari server dan jatuh ke nama cadangan berakhiran `.pdf`. Diperbaiki dengan `exposed_headers => ['Content-Disposition']` di `config/cors.php`. PDF tampak benar hanya karena nama cadangannya kebetulan `.pdf` — inilah sebabnya cacat ini tidak terlihat pada uji yang hanya memeriksa status 200. |
+| K-86 | **Uji `LaporanEksporTest.php:221` (KP-5.2) flaky** — gagal 1 dari 2 run suite penuh, lulus pada run berikutnya dan lulus saat berkasnya dijalankan sendiri. | Dugaan: helper `teksPdf()` kadang tidak menemukan teks karena cara dompdf memecah aliran konten FlateDecode. BELUM diperbaiki. Perlu diperkuat agar CI tidak pernah merah tanpa sebab nyata. |
+| K-87 | Subagen Fase 6 menjalankan `npm install` di `au-backend` (repo API-only) demi memenuhi perintah verifikasi `npm run build`. | Tidak merusak: `node_modules/` dan `public/build/` sudah terabaikan `.gitignore`, dan `package-lock.json` dihapus sehingga tidak masuk repo. Namun `au-backend` sebenarnya tidak memerlukan build aset frontend — perintah verifikasinya seharusnya hanya Pint + suite. |
