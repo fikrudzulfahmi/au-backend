@@ -143,3 +143,34 @@ Tanggal: 6 Oktober 2026 · Status: selesai (219 uji backend, 31 uji frontend)
 | `drawRectangle` gagal | Tanda tangan Intervention v3 adalah `($x, $y, $init)`; lebar/tinggi diatur di dalam closure, bukan argumen terpisah | Disusun ulang sesuai API v3 |
 | Relasi `Pegawai::lokasi()` meledak saat dipanggil | `BelongsToMany` dipakai tanpa diimpor (laten: tipe parameter baru diperiksa saat dipakai) | Impor ditambahkan |
 | Halaman presensi menampilkan "Bukan hari kerja" saat permintaan gagal | Penanda hari diperiksa dengan `!data?.is_hari_kerja`, sehingga data yang tidak ada tampil seolah hari libur | Dijaga `data !== undefined` dan keadaan gagal dijelaskan apa adanya |
+
+---
+
+## K. Catatan Fase 4 (jurnal & presensi siswa)
+
+Tanggal: 6 Oktober 2026. Cakupan: FR-JRN-01..10, BR-19..BR-23, BR-26, A-01, A-09, A-12.
+
+| No | Keputusan | Alasan / dampak |
+|---|---|---|
+| K-59 | Sesi = **rentang jam ke**, bukan satu jam pelajaran. | FR-JRN-01 menuntut entri jadwal berurutan untuk plotting mapel dan hari yang sama digabung. Karena itu `jam_ke_mulai` dan `jam_ke_selesai` disimpan berdampingan, dan penggabungan hanya terjadi bila jam ke benar-benar `+1` DAN plotting mapelnya sama — dua mapel berbeda pada jam 1 dan 3 tidak ikut tergabung. Diuji keduanya. |
+| K-60 | `jam_ke_selesai` diambil dari jadwal, bukan dari kiriman klien. | Sesi adalah fakta jadwal. Klien yang mengirim `jam_ke_selesai` berbeda diabaikan server; ada uji khusus untuk itu. |
+| K-61 | BR-21 ditopang **dua lapis**: indeks unik database + terjemahan `QueryException`. | Lapisan layanan bisa dilewati oleh balapan dua permintaan; database tidak. Duplikat 1062 diterjemahkan menjadi 409 berpesan jelas ("muat ulang halaman"), bukan 500. |
+| K-62 | BR-22: siswa di luar kelas **ditolak**, bukan diabaikan diam-diam. | Mengabaikan akan menyimpan jurnal yang tampak benar padahal ada siswa hilang dari presensi. Penolakan membuat ketidakcocokan terlihat saat itu juga. |
+| K-63 | Daftar siswa disalin saat jurnal dibuat, tidak dihitung ulang saat dibaca. | BR-22 mengikat daftar pada tahun pelajaran jurnal; bila plotting diubah setelahnya, jurnal lama harus tetap menggambarkan kelas saat itu. |
+| K-64 | Presensi siswa diganti **utuh** saat jurnal diubah. | Menyisakan baris lama yang tidak lagi dikirim akan membuat jumlah H/S/I/A tidak cocok dengan yang dilihat guru. |
+| K-65 | KP-4.6 (Berhalangan) ditegakkan **di server**, bukan hanya disandikan di tampilan. | Endpoint membuat jurnal menolak 422 `BERHALANGAN` walaupun UI disembunyikan. `PengajuanService::berhalanganPada()` sengaja tidak menyaring jenis pengajuan, sesuai FR-IZN-07 bahwa **dinas** juga membuat sesi berhalangan. |
+| K-66 | Kepala sekolah & wakasek **tidak** diberi akses ke endpoint `/jurnal`. | Matriks Bagian 2 memberi mereka `L` pada *laporan* jurnal (Fase 5), bukan pada endpoint jurnal. Memberi akses lebih longgar sekarang akan melanggar matriks. |
+| K-67 | Admin boleh mengoreksi jurnal guru, koreksinya tercatat sebagai `AKSI_UBAH_JURNAL` dengan pelakunya. | Matriks `K**` menuntut koreksi admin tercatat di `audit_log`; memakai aksi yang sama menjaga jejaknya satu tempat. |
+| K-68 | **Endpoint baru `GET /jurnal/kelas-wali`.** | Ditemukan lewat uji asap: halaman rekap wali kelas memakai master `/kelas`, yang menurut matriks hanya untuk admin/kepsek/wakasek — guru menerima **403**, sehingga halaman rekap pecah tepat pada pengguna yang dituju. Master data tidak boleh dilonggarkan demi satu halaman; endpoint khusus ini mengembalikan kelas wali milik guru (admin tetap menerima seluruh kelas tahun aktif). |
+| K-69 | Foto jurnal tanpa watermark, disimpan di disk privat. | Berbeda dari foto presensi (BR-29 mewajibkan watermark karena membuktikan kehadiran). Foto kegiatan hanya dokumentasi; tetap privat dan disajikan lewat endpoint berpelindung, dan berkas yang gugur retensi dijawab 404 berpesan, bukan 500. |
+
+### Bug yang ditemukan uji saat pengembangan (dicatat agar tidak terulang)
+
+1. **`JurnalFoto` tanpa `$fillable`** padahal layanan memakai `create()` — menyimpan foto gagal 500. Anggapan "baris dibuat sistem, jadi tidak perlu fillable" keliru: `$fillable` melindungi dari pemetaan massal masukan pengguna, bukan dari kode sendiri.
+2. **`ResponsDaftar::buat()` dipanggil dengan urutan argumen terbalik** sehingga daftar riwayat tidak akan pernah terbentuk benar.
+3. **Helper uji Fase 4 memakai empat model tanpa impor** (`Jadwal`, `PlottingKelas`, `PresensiPegawai`, `Siswa`) — semua uji gagal dengan "Class not found".
+
+### Yang perlu diketahui pengembang berikutnya
+
+- Halaman isi jurnal menandai sesi lewat URL `:sesi` = `plottingMapelId-jamKeMulai` + query `?tanggal=`; penanda ini **dicocokkan ke jadwal server**, jadi halaman tidak pernah mengarang sesi (FR-JRN-06).
+- `labelJamKe()` pada model dan `labelJamKe()` pada layanan sengaja ada di dua tempat: yang pertama untuk jurnal tersimpan, yang kedua untuk sesi yang belum tersimpan.

@@ -325,3 +325,40 @@ it('mengizinkan admin melihat rekap kelas mana pun', function () {
         ->assertOk()
         ->assertJsonPath('data.siswa.0.total', 0);
 });
+
+// =====================================================================
+// FR-JRN-10 — daftar kelas yang boleh direkap
+// =====================================================================
+
+it('menyajikan kelas wali milik guru, bukan seluruh kelas', function () {
+    $r = siapkanJurnal();
+    $r['kelas']->update(['wali_kelas_id' => $r['guru']->id]);
+
+    // Kelas lain pada tahun yang sama, diampu orang lain (atau tanpa wali).
+    Kelas::factory()->create(['tahun_pelajaran_id' => $r['tahun']->id]);
+
+    $this->actingAs($r['user'])
+        ->getJson('/api/v1/jurnal/kelas-wali')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $r['kelas']->id);
+});
+
+it('menyajikan daftar kosong untuk guru yang bukan wali kelas', function () {
+    $r = siapkanJurnal();
+
+    $this->actingAs($r['user'])
+        ->getJson('/api/v1/jurnal/kelas-wali')
+        ->assertOk()
+        ->assertJsonCount(0, 'data');
+});
+
+it('menyajikan seluruh kelas tahun aktif untuk admin', function () {
+    $r = siapkanJurnal();
+    Kelas::factory()->create(['tahun_pelajaran_id' => $r['tahun']->id]);
+
+    $this->actingAs(sebagaiAdmin())
+        ->getJson('/api/v1/jurnal/kelas-wali')
+        ->assertOk()
+        ->assertJsonCount(2, 'data');
+});

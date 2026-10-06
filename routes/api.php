@@ -305,6 +305,10 @@ Route::prefix('v1')->group(function (): void {
             // FR-JRN-08 / BR-22 — daftar siswa kelas untuk halaman isi jurnal.
             Route::get('/siswa-kelas', [JurnalController::class, 'siswaKelas']);
 
+            // FR-JRN-10 — kelas yang boleh direkap pengguna ini.
+            // Perlu endpoint sendiri: master /kelas hanya untuk admin/kepsek/wakasek.
+            Route::get('/kelas-wali', [JurnalController::class, 'kelasWali']);
+
             // FR-JRN-10 — rekap presensi siswa (wali kelas: kelasnya sendiri, admin: semua).
             Route::get('/rekap-siswa', [JurnalController::class, 'rekapSiswa']);
 

@@ -170,7 +170,37 @@ final class JurnalController extends Controller
     }
 
     /**
-     * FR-JRN-10 — rekap presensi siswa satu kelas pada rentang periode.
+    /**
+     * FR-JRN-10 — daftar kelas yang dapat direkap pengguna ini.
+     *
+     * Endpoint ini ada karena master `/kelas` hanya untuk admin/kepsek/wakasek
+     * (matriks Bagian 2), sehingga guru yang menjadi wali kelas TIDAK bisa memakai
+     * endpoint itu untuk menemukan kelasnya (ditemukan lewat uji asap: 403).
+     * Guru menerima kelas walinya saja; admin menerima seluruh kelas tahun aktif.
+     */
+    public function kelasWali(Request $request): JsonResponse
+    {
+        $semester = $this->semesterAktif();
+
+        $query = Kelas::query()
+            ->where('tahun_pelajaran_id', $semester->tahun_pelajaran_id)
+            ->orderBy('nama');
+
+        if (! $this->pengguna($request)->punyaPeran(Role::ADMIN)) {
+            $pegawai = $this->pegawaiSendiri($request);
+            $query->where('wali_kelas_id', $pegawai->id);
+        }
+
+        return response()->json([
+            'data' => $query->get(['id', 'nama', 'tingkat'])->map(fn ($k): array => [
+                'id' => (int) $k->id,
+                'nama' => $k->nama,
+                'tingkat' => $k->tingkat,
+            ])->all(),
+        ]);
+    }
+
+    /** FR-JRN-10 — rekap presensi siswa satu kelas pada rentang periode.
      * Hanya wali kelas tersebut (lihat kelasnya sendiri) dan admin.
      */
     public function rekapSiswa(Request $request): JsonResponse
