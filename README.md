@@ -10,7 +10,7 @@ untuk repo backend.
   (sumber kebenaran tunggal; Bagian 6 dan 7 bersifat mengikat).
 - Catatan keputusan & penyimpangan: [`CATATAN-KEPUTUSAN.md`](CATATAN-KEPUTUSAN.md).
 
-> Status: **Fase 0, 1, 2, dan 3 selesai.**
+> Status: **Fase 0, 1, 2, 3, dan 4 selesai.**
 > Fase 0 — kerangka dua repo, autentikasi, waktu server, Info Sekolah.
 > Fase 1 — master data (tahun pelajaran/semester/hari libur, jurusan, kelas, siswa, pegawai, mapel),
 > import/export Excel, pengaturan sistem, pengguna & peran, audit log.
@@ -19,7 +19,13 @@ untuk repo backend.
 > Fase 3 — presensi GPS + foto dengan watermark, luar radius dua jalur, pengajuan
 > izin/sakit/dinas/cuti, monitoring harian, persetujuan, serta pengaturan lokasi & jam kerja.
 > **219 uji Pest lulus (855 assertion).** Rencana fase ada di Bagian 11 dokumen spesifikasi.
-> Untuk melanjutkan ke Fase 4, baca `docs/SERAH-TERIMA-FASE-4.md`.
+> Fase 4 — jurnal pembelajaran dan presensi siswa: sesi terbentuk dari jadwal (entri
+> berurutan digabung jadi satu sesi), gerbang presensi masuk (BR-19), hari izin disetujui
+> tampil "Berhalangan" dan tidak dapat diisi (KP-4.6), edit tanpa batas waktu dengan jejak
+> audit (BR-20), serta rekap presensi siswa untuk wali kelas.
+>
+> Untuk melanjutkan ke Fase 5 (laporan & dokumen resmi), baca
+> `docs/SERAH-TERIMA-FASE-5.md`.
 
 ---
 
