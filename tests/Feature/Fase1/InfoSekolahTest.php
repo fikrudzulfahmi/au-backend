@@ -143,6 +143,38 @@ it('menjadikan kepala sekolah sebagai penandatangan default', function (): void 
     ]);
 });
 
+/** FR-SCH-05 — tab Landing Page pada halaman Info Sekolah. */
+it('menyimpan pengaturan Landing Page dan hanya untuk admin', function (): void {
+    $admin = sebagaiAdmin();
+
+    $this->actingAs($admin)->putJson('/api/v1/pengaturan/landing', [
+        'landing_aktif' => true,
+        'landing_judul_hero' => 'SIPANDU — Presensi & Jurnal Digital',
+        'landing_tampilkan_peta' => false,
+        'landing_tampilkan_pengumuman' => true,
+    ])->assertOk();
+
+    $this->actingAs($admin)->getJson('/api/v1/pengaturan/landing')
+        ->assertOk()
+        ->assertJsonPath('data.landing_judul_hero', 'SIPANDU — Presensi & Jurnal Digital')
+        ->assertJsonPath('data.landing_tampilkan_peta', false);
+
+    // Nilai ini juga tercermin pada respons publik untuk landing page.
+    ProfilSekolah::factory()->create();
+    $this->getJson('/api/v1/publik/sekolah')
+        ->assertOk()
+        ->assertJsonPath('data.landing.tampilkan_peta', false)
+        ->assertJsonPath('data.landing.judul_hero', 'SIPANDU — Presensi & Jurnal Digital');
+
+    $this->actingAs(sebagaiKepsek())
+        ->putJson('/api/v1/pengaturan/landing', [
+            'landing_aktif' => true,
+            'landing_tampilkan_peta' => true,
+            'landing_tampilkan_pengumuman' => true,
+        ])
+        ->assertStatus(403);
+});
+
 it('menyimpan pengaturan teknis presensi (FR-LOK-05)', function (): void {
     $admin = sebagaiAdmin();
 

@@ -120,6 +120,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/pengaturan/sekolah', [PengaturanSekolahController::class, 'show']);
             Route::post('/pengaturan/sekolah', [PengaturanSekolahController::class, 'update']);
             Route::post('/pengaturan/sekolah/penandatangan-default', [PengaturanSekolahController::class, 'jadikanPenandatanganDefault']);
+            Route::get('/pengaturan/landing', [PengaturanSekolahController::class, 'landing']);
+            Route::put('/pengaturan/landing', [PengaturanSekolahController::class, 'simpanLanding']);
             Route::get('/pengaturan/sistem', [PengaturanSekolahController::class, 'sistem']);
             Route::put('/pengaturan/sistem', [PengaturanSekolahController::class, 'simpanSistem']);
 

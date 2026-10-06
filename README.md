@@ -10,8 +10,11 @@ untuk repo backend.
   (sumber kebenaran tunggal; Bagian 6 dan 7 bersifat mengikat).
 - Catatan keputusan & penyimpangan: [`CATATAN-KEPUTUSAN.md`](CATATAN-KEPUTUSAN.md).
 
-> Status: **Fase 0 selesai** (kerangka dua repo + autentikasi + waktu server + Info Sekolah).
-> Rencana fase ada di Bagian 11 dokumen spesifikasi.
+> Status: **Fase 0 dan Fase 1 selesai.**
+> Fase 0 — kerangka dua repo, autentikasi, waktu server, Info Sekolah.
+> Fase 1 — master data (tahun pelajaran/semester/hari libur, jurusan, kelas, siswa, pegawai, mapel),
+> import/export Excel, pengaturan sistem, pengguna & peran, audit log.
+> 94 uji Pest lulus (356 assertion). Rencana fase ada di Bagian 11 dokumen spesifikasi.
 
 ---
 
@@ -126,7 +129,9 @@ tests/Feature, tests/Unit      uji Pest
 
 ---
 
-## 6. Endpoint yang sudah tersedia (Fase 0)
+## 6. Endpoint yang sudah tersedia
+
+**Publik & autentikasi (Fase 0)**
 
 | Metode | Jalur | Akses | Keterangan |
 |---|---|---|---|
@@ -136,6 +141,43 @@ tests/Feature, tests/Unit      uji Pest
 | GET | `/api/v1/auth/me` | Bearer | data pengguna, peran, dan pegawai |
 | POST | `/api/v1/auth/logout` | Bearer | mencabut token aktif |
 | POST | `/api/v1/auth/ganti-password` | Bearer | FR-SEC-04 |
+
+**Master data (Fase 1)** — `L` = admin, kepala sekolah, wakasek; `K` = admin saja.
+
+| Metode | Jalur | Akses | Keterangan |
+|---|---|---|---|
+| GET | `/api/v1/tahun-pelajaran` · `/{id}` | L | FR-TP-01 |
+| POST/PUT/DELETE | `/api/v1/tahun-pelajaran` · `/{id}` | K | FR-TP-01 |
+| POST | `/api/v1/tahun-pelajaran/{id}/aktifkan` | K | FR-TP-04 / BR-01 |
+| POST | `/api/v1/tahun-pelajaran/{id}/selesai` | K | FR-TP-05 / BR-27 |
+| POST | `/api/v1/tahun-pelajaran/{id}/salin` | K | FR-TP-06 (ringkasan) |
+| PUT | `/api/v1/semester/{id}` | K | FR-TP-02 |
+| GET/POST/PUT/DELETE | `/api/v1/hari-libur` | L / K | FR-TP-07 |
+| GET | `/api/v1/jurusan` · `/kelas` · `/mapel` | L | FR-KLS, FR-MPL |
+| POST/PUT/DELETE | `/api/v1/jurusan` · `/kelas` · `/mapel` | K | BR-02 pada kelas |
+| POST | `/api/v1/kelas/salin` | K | FR-KLS-04 (X→XI, XI→XII) |
+| GET | `/api/v1/siswa` · `/siswa/{id}` | L | FR-SIS-01/05 |
+| POST/PUT/DELETE | `/api/v1/siswa` · `/siswa/{id}` | K | FR-SIS-01/02 |
+| GET | `/api/v1/siswa/template` · `/siswa/ekspor` | K | FR-SIS-03/04 |
+| POST | `/api/v1/siswa/import` | K | FR-SIS-03 / KP-1.3 |
+| GET | `/api/v1/pegawai` · `/pegawai/{id}` | L | FR-PEG-01 |
+| POST/PUT/DELETE | `/api/v1/pegawai` · `/pegawai/{id}` | K | FR-PEG-01 / KP-1.4 |
+| POST | `/api/v1/pegawai/{id}/akun` · `/reset-password` · `/reset-perangkat` | K | FR-PEG-02/05/06 |
+| GET | `/api/v1/pegawai/template` · `/pegawai/ekspor` | K | FR-PEG-03 |
+| POST | `/api/v1/pegawai/import` | K | FR-PEG-03 / KP-1.3 |
+| GET | `/api/v1/mapel/ekspor` | K | FR-MPL-02 |
+
+**Pengaturan (Fase 1)** — hanya admin (`FR-SCH-06`).
+
+| Metode | Jalur | Keterangan |
+|---|---|---|
+| GET/POST | `/api/v1/pengaturan/sekolah` | Info Sekolah; NPSN wajib 8 digit, logo dikompres (KP-1.6) |
+| POST | `/api/v1/pengaturan/sekolah/penandatangan-default` | FR-SCH-03 |
+| GET/PUT | `/api/v1/pengaturan/landing` | FR-SCH-05 |
+| GET/PUT | `/api/v1/pengaturan/sistem` | FR-LOK-05 (akurasi GPS, kompresi foto) |
+| GET | `/api/v1/pengaturan/audit-log` · `/aksi` | FR-SEC-05 — hanya baca |
+| GET/PUT | `/api/v1/pengaturan/pengguna` · `/{id}` | Bagian 2 / A-11 |
+| POST | `/api/v1/pengaturan/pengguna/{id}/reset-perangkat` | BR-14 |
 
 Konvensi respons (3.4):
 

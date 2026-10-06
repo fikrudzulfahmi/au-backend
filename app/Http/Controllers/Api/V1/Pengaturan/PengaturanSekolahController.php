@@ -146,6 +146,42 @@ class PengaturanSekolahController extends Controller
         ]);
     }
 
+    /**
+     * FR-SCH-05 — pengaturan Landing Page pada halaman Info Sekolah.
+     * Hanya admin (FR-SCH-06); perubahan dicatat di audit_log.
+     */
+    public function landing(): JsonResponse
+    {
+        return response()->json([
+            'data' => [
+                'landing_aktif' => (bool) $this->pengaturan->ambil('landing_aktif'),
+                'landing_judul_hero' => $this->pengaturan->ambil('landing_judul_hero'),
+                'landing_tampilkan_peta' => (bool) $this->pengaturan->ambil('landing_tampilkan_peta'),
+                'landing_tampilkan_pengumuman' => (bool) $this->pengaturan->ambil('landing_tampilkan_pengumuman'),
+            ],
+        ]);
+    }
+
+    public function simpanLanding(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'landing_aktif' => ['required', 'boolean'],
+            'landing_judul_hero' => ['nullable', 'string', 'max:191'],
+            'landing_tampilkan_peta' => ['required', 'boolean'],
+            'landing_tampilkan_pengumuman' => ['required', 'boolean'],
+        ], [
+            'landing_judul_hero.max' => 'Judul hero maksimal 191 karakter.',
+        ]);
+
+        foreach ($data as $kunci => $nilai) {
+            $this->pengaturan->simpan($kunci, $nilai);
+        }
+
+        $this->audit->catat(AuditLogService::AKSI_UBAH_PENGATURAN, $request->user(), null, null, $data);
+
+        return response()->json(['message' => 'Pengaturan Landing Page disimpan.', 'data' => $data]);
+    }
+
     /** FR-LOK-05 — pengaturan teknis presensi (akurasi GPS, kompresi foto). */
     public function sistem(): JsonResponse
     {
