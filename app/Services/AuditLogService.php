@@ -74,6 +74,16 @@ class AuditLogService
 
     public const AKSI_TETAPKAN_LOKASI = 'tetapkan_lokasi_pegawai';
 
+    // ---------- Fase 4: jurnal & presensi siswa ----------
+
+    public const AKSI_ISI_JURNAL = 'isi_jurnal';
+
+    /** BR-20 — setiap edit jurnal pemilik dicatat (siapa, kapan, lama-baru). */
+    public const AKSI_UBAH_JURNAL = 'ubah_jurnal';
+
+    /** Admin boleh mengoreksi jurnal/presensi siswa; koreksinya tetap dicatat. */
+    public const AKSI_KOREKSI_JURNAL = 'koreksi_jurnal';
+
     public function catat(
         string $aksi,
         ?User $user = null,

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\V1\Akademik\JadwalController;
 use App\Http\Controllers\Api\V1\Akademik\JamPelajaranController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\Jurnal\JurnalController;
 use App\Http\Controllers\Api\V1\Master\HariLiburController;
 use App\Http\Controllers\Api\V1\Master\JurusanController;
 use App\Http\Controllers\Api\V1\Master\KelasController;
@@ -286,6 +287,37 @@ Route::prefix('v1')->group(function (): void {
         Route::middleware('peran:admin')->prefix('jam-kerja')->group(function (): void {
             Route::get('/', [JamKerjaController::class, 'index']);
             Route::post('/', [JamKerjaController::class, 'simpan']);
+        });
+
+        /* --------------------------------- jurnal & presensi siswa (FR-JRN) */
+        // Matriks akses Bagian 2 baris "Jurnal + presensi siswa":
+        //   admin = K** (boleh mengoreksi, setiap koreksi tercatat di audit_log)
+        //   guru  = K(S), hanya sesi pada jadwalnya sendiri
+        //   kepala sekolah & wakasek = TIDAK ada akses ke endpoint ini; keduanya
+        //   melihatnya lewat laporan pada fase berikutnya.
+        Route::middleware('peran:guru,admin')->prefix('jurnal')->group(function (): void {
+            // FR-JRN-09 — riwayat jurnal milik sendiri, filter periode/kelas/mapel.
+            Route::get('/', [JurnalController::class, 'index']);
+
+            // FR-JRN-01 — sesi hari ini dari jadwal, beserta status jurnalnya.
+            Route::get('/sesi-hari-ini', [JurnalController::class, 'sesiHariIni']);
+
+            // FR-JRN-08 / BR-22 — daftar siswa kelas untuk halaman isi jurnal.
+            Route::get('/siswa-kelas', [JurnalController::class, 'siswaKelas']);
+
+            // FR-JRN-10 — rekap presensi siswa (wali kelas: kelasnya sendiri, admin: semua).
+            Route::get('/rekap-siswa', [JurnalController::class, 'rekapSiswa']);
+
+            // Foto kegiatan tersimpan di disk privat; penyajiannya lewat otorisasi.
+            Route::get('/foto/{foto}', [JurnalController::class, 'foto']);
+
+            Route::post('/', [JurnalController::class, 'simpan']);
+
+            // Rute literal di atas didaftarkan lebih dulu; batas angka menjaga
+            // '/siswa-kelas' dan '/sesi-hari-ini' tidak tertangkap sebagai {jurnal}.
+            Route::get('/{jurnal}', [JurnalController::class, 'tampil'])->whereNumber('jurnal');
+            Route::put('/{jurnal}', [JurnalController::class, 'perbarui'])->whereNumber('jurnal');
+            Route::get('/{jurnal}/presensi-siswa', [JurnalController::class, 'presensiSiswa'])->whereNumber('jurnal');
         });
     });
 });

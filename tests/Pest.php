@@ -2,17 +2,21 @@
 
 declare(strict_types=1);
 
+use App\Models\Jadwal;
 use App\Models\JamKerja;
 use App\Models\Jurusan;
 use App\Models\Kelas;
 use App\Models\LokasiPresensi;
 use App\Models\Mapel;
 use App\Models\Pegawai;
+use App\Models\PlottingKelas;
 use App\Models\PlottingMapel;
 use App\Models\PolaJam;
 use App\Models\PolaJamHari;
+use App\Models\PresensiPegawai;
 use App\Models\Role;
 use App\Models\Semester;
+use App\Models\Siswa;
 use App\Models\SlotJam;
 use App\Models\TahunPelajaran;
 use App\Models\User;
@@ -387,4 +391,123 @@ function pasangPolaJam(Semester $semester, array $hari = [1], int $jumlahJp = 4)
     ]));
 
     return ['pola' => $pola, 'hari' => $hari, 'slot' => $slot];
+}
+
+/**
+ * Rangkaian uji Fase 4 (jurnal & presensi siswa).
+ *
+ * Membentuk: tahun+semester aktif, guru beserta akun login, satu plotting mapel,
+ * jadwal Senin pada jam ke-1..3 untuk plotting yang SAMA (karena itu menjadi satu
+ * sesi gabungan menurut FR-JRN-01), siswa aktif yang terplot di kelas itu (BR-22),
+ * dan opsional presensi masuk sesuai BR-19.
+ *
+ * @param  list<int>  $jamKe  jam ke yang dijadwalkan berturut-turut
+ * @return array<string, mixed>
+ */
+function siapkanJurnal(bool $denganPresensi = true, array $jamKe = [1, 2, 3], ?string $validasi = null): array
+{
+    $akademik = siapkanAkademik();
+    $semester = $akademik['semester'];
+    $guru = $akademik['guru'];
+    $plotting = $akademik['plotting'];
+    $kelas = $akademik['kelas'];
+    $tahun = $akademik['tahun'];
+
+    /** @var User $user */
+    $user = User::factory()->create([
+        'pegawai_id' => $guru->id,
+        'name' => $guru->nama,
+        'username' => $guru->nip,
+    ]);
+
+    $user->roles()->sync(Role::query()->where('kode', Role::GURU)->pluck('id')->all());
+
+    // Minimal 4 slot supaya addJadwal() dapat menambah jam lain pada uji penggabungan.
+    $pola = pasangPolaJam($semester, [1], max(4, max($jamKe)));
+
+    foreach ($jamKe as $jp) {
+        Jadwal::factory()->create([
+            'semester_id' => $semester->id,
+            'hari' => 1,
+            'slot_jam_id' => $pola['slot']->firstWhere('jam_ke', $jp)?->id,
+            'plotting_mapel_id' => $plotting->id,
+            'pegawai_id' => $guru->id,
+            'kelas_id' => $kelas->id,
+        ]);
+    }
+
+    $siswa = collect();
+
+    for ($i = 1; $i <= 4; $i++) {
+        /** @var Siswa $s */
+        $s = Siswa::factory()->create(['status' => Siswa::STATUS_AKTIF]);
+
+        PlottingKelas::factory()->create([
+            'tahun_pelajaran_id' => $tahun->id,
+            'kelas_id' => $kelas->id,
+            'siswa_id' => $s->id,
+        ]);
+
+        $siswa->push($s);
+    }
+
+    $presensi = null;
+
+    if ($denganPresensi) {
+        $presensi = PresensiPegawai::factory()->create([
+            'pegawai_id' => $guru->id,
+            'tanggal' => seninUji(),
+            'semester_id' => $semester->id,
+            'masuk_validasi' => $validasi ?? PresensiPegawai::VALID,
+        ]);
+    }
+
+    return [
+        ...$akademik,
+        'user' => $user->fresh(['roles', 'pegawai']),
+        'siswa' => $siswa,
+        'pola' => $pola,
+        'presensi' => $presensi,
+    ];
+}
+
+/**
+ * Menambah satu entri jadwal pada jam ke tertentu untuk rangkaian `siapkanJurnal()`.
+ * Dipakai menguji penggabungan sesi (FR-JRN-01) dengan plotting mapel berbeda.
+ */
+function addJadwal(array $rangkaian, int $plottingMapelId, int $jamKe): Jadwal
+{
+    return Jadwal::factory()->create([
+        'semester_id' => $rangkaian['semester']->id,
+        'hari' => 1,
+        'slot_jam_id' => $rangkaian['pola']['slot']->firstWhere('jam_ke', $jamKe)?->id,
+        'plotting_mapel_id' => $plottingMapelId,
+        'pegawai_id' => $rangkaian['guru']->id,
+        'kelas_id' => $rangkaian['kelas']->id,
+    ]);
+}
+
+/**
+ * Badan permintaan untuk membuat jurnal dari rangkaian `siapkanJurnal()`.
+ *
+ * @param  list<Siswa>  $siswa
+ * @return array<string, mixed>
+ */
+function badanJurnal(array $rangkaian, array $siswa = [], array $ganti = []): array
+{
+    $presensi = [];
+
+    foreach ($siswa as $s) {
+        $presensi[(string) $s->id] = ['status' => 'H'];
+    }
+
+    return array_merge([
+        'semester_id' => $rangkaian['semester']->id,
+        'plotting_mapel_id' => $rangkaian['plotting']->id,
+        'tanggal' => seninUji(),
+        'jam_ke_mulai' => 1,
+        'materi' => 'Materi uji jurnal',
+        'kegiatan' => 'Kegiatan pembelajaran uji.',
+        'presensi' => $presensi,
+    ], $ganti);
 }
