@@ -25,9 +25,23 @@ class AuditLogService
 
     public const AKSI_RESET_PERANGKAT = 'reset_perangkat';
 
+    public const AKSI_RESET_PASSWORD = 'reset_password';
+
     public const AKSI_UBAH_PENGATURAN = 'ubah_pengaturan';
 
     public const AKSI_UBAH_INFO_SEKOLAH = 'ubah_info_sekolah';
+
+    public const AKSI_BUAT = 'buat_data';
+
+    public const AKSI_UBAH = 'ubah_data';
+
+    public const AKSI_HAPUS = 'hapus_data';
+
+    public const AKSI_IMPORT = 'import_data';
+
+    public const AKSI_AKTIFKAN_TAHUN = 'aktifkan_tahun_pelajaran';
+
+    public const AKSI_SELESAI_TAHUN = 'tandai_selesai_tahun_pelajaran';
 
     public function catat(
         string $aksi,
