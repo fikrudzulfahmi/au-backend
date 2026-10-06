@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Master;
 
+use App\Exceptions\AturanBisnisException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Master\AktifkanTahunPelajaranRequest;
 use App\Http\Requests\Master\TahunPelajaranRequest;
 use App\Http\Resources\TahunPelajaranResource;
 use App\Models\TahunPelajaran;
 use App\Services\AuditLogService;
+use App\Services\RetensiFotoService;
 use App\Services\TahunPelajaranService;
 use App\Support\PenjagaHapus;
 use App\Support\ResponsDaftar;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -121,6 +124,38 @@ class TahunPelajaranController extends Controller
         return response()->json([
             'message' => "Tahun pelajaran {$tahun->nama} ditandai selesai. Data transaksinya bersifat read-only.",
             'data' => new TahunPelajaranResource($tahun),
+        ]);
+    }
+
+    /**
+     * BR-30 — pembersihan manual berkas foto presensi & lampiran setelah konfirmasi admin.
+     *
+     * Hanya tahun pelajaran berstatus `selesai` yang boleh dibersihkan; tahun yang
+     * masih aktif ditolak 422 supaya perlindungannya tidak bergantung pada UI.
+     */
+    public function bersihkanFoto(
+        Request $request,
+        TahunPelajaran $tahunPelajaran,
+        RetensiFotoService $retensi,
+    ): JsonResponse {
+        $request->validate([
+            'konfirmasi' => ['required', 'accepted'],
+        ]);
+
+        if (! $tahunPelajaran->isSelesai()) {
+            throw new AturanBisnisException(
+                "Tahun pelajaran {$tahunPelajaran->nama} berstatus \"{$tahunPelajaran->status}\". Foto hanya boleh dibersihkan setelah tahun pelajaran ditandai selesai.",
+                'TAHUN_BELUM_SELESAI',
+            );
+        }
+
+        $ringkasan = $retensi->bersihkan(new Collection([$tahunPelajaran]));
+
+        $this->audit->catat(AuditLogService::AKSI_BERSIHKAN_FOTO, $request->user(), $tahunPelajaran, null, $ringkasan);
+
+        return response()->json([
+            'message' => "Pembersihan berkas foto tahun pelajaran {$tahunPelajaran->nama} selesai. Data teks presensi tetap tersimpan.",
+            'data' => $ringkasan,
         ]);
     }
 

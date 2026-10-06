@@ -102,6 +102,8 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/tahun-pelajaran/{tahun_pelajaran}/aktifkan', [TahunPelajaranController::class, 'aktifkan']);
             Route::post('/tahun-pelajaran/{tahun_pelajaran}/selesai', [TahunPelajaranController::class, 'tandaiSelesai']);
             Route::post('/tahun-pelajaran/{tahun_pelajaran}/salin', [TahunPelajaranController::class, 'salin']);
+            // BR-30 — pembersihan manual berkas foto setelah konfirmasi admin.
+            Route::post('/tahun-pelajaran/{tahun_pelajaran}/bersihkan-foto', [TahunPelajaranController::class, 'bersihkanFoto']);
 
             Route::put('/semester/{semester}', [SemesterController::class, 'update']);
             Route::patch('/semester/{semester}', [SemesterController::class, 'update']);

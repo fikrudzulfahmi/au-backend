@@ -239,6 +239,13 @@ final class JurnalController extends Controller
     {
         $this->pastikanBolehAkses($request, $foto->jurnal);
 
+        // BR-30 — setelah retensi, kolom path diisi NULL; itu keadaan normal.
+        if ($foto->foto_path === null || $foto->foto_path === '') {
+            return response()->json([
+                'message' => 'Berkas foto sudah tidak tersedia karena masa simpan berakhir.',
+            ], 404);
+        }
+
         $berkas = Storage::disk('local')->path($foto->foto_path);
 
         // Retensi dapat membuang berkasnya lebih dulu; itu keadaan normal, bukan galat server.

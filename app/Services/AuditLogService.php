@@ -74,6 +74,12 @@ class AuditLogService
 
     public const AKSI_TETAPKAN_LOKASI = 'tetapkan_lokasi_pegawai';
 
+    /**
+     * BR-30 — retensi foto: berkas foto presensi & lampiran tahun pelajaran
+     * `selesai` dibuang (dijalankan oleh tugas terjadwal maupun admin manual).
+     */
+    public const AKSI_BERSIHKAN_FOTO = 'bersihkan_foto_presensi';
+
     // ---------- Fase 4: jurnal & presensi siswa ----------
 
     public const AKSI_ISI_JURNAL = 'isi_jurnal';
