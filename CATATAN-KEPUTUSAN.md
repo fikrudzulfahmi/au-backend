@@ -225,3 +225,30 @@ Tanggal: 6 Oktober 2026. Cakupan: FR-JRN-01..10, BR-19..BR-23, BR-26, A-01, A-09
 | K-91 | Bukti uji negatif: perlindungan tahun aktif **sengaja dilumpuhkan** (`isSelesai()` → `false`, filter `status` dihapus), lalu uji "tahun pelajaran AKTIF tidak pernah tersentuh" dijalankan → **MERAH** (`Unable to find a file or directory at path [...]`). Perlindungan dikembalikan dan uji hijau lagi. | Membuktikan uji itu benar-benar menguji perlindungan, bukan lulus palsu karena datanya kebetulan kosong. |
 | K-92 | Jadwal berkala: `Schedule::command('presensi:bersihkan-foto')->dailyAt('01:30')->timezone('Asia/Jakarta')->withoutOverlapping()` di `routes/console.php`. | Dini hari agar tidak berebut dengan jam sibuk presensi pagi. `onOneServer()` sengaja tidak dipakai karena menuntut driver cache ber-atomic-lock. |
 | K-93 | Endpoint pembersihan manual: `POST /api/v1/tahun-pelajaran/{id}/bersihkan-foto` di grup middleware `peran:admin`, menuntut `konfirmasi` bernilai benar (BR-31). | Matriks Bagian 2: hanya admin (K). Tahun pelajaran yang belum `selesai` ditolak **422** berkode `TAHUN_BELUM_SELESAI` (bukan 500) sehingga perlindungannya tidak bergantung pada UI. Ditambahkan ke grup rute yang sudah ada — tidak menduplikasi endpoint serupa (belum ada). |
+
+---
+
+## N. Temuan flaky suite uji (utang, belum diperbaiki)
+
+Dua uji teramati gagal secara **bergantung urutan** pada suite penuh, lalu lulus saat berkasnya dijalankan sendiri. Keduanya menyangkut pemrosesan gambar/PDF:
+
+| Uji | Gejala |
+|---|---|
+| `tests/Feature/Fase5/LaporanEksporTest.php:221` (KP-5.2) | Teks kop baru tidak ditemukan pada PDF hasil cetak ulang. Lulus saat berkas dijalankan sendiri. |
+| `tests/Feature/Fase3/PresensiMasukTest.php:253` (BR-29) | Lebar foto hasil unggah > 800 px, padahal seharusnya diperkecil. Lulus 19/19 saat berkas dijalankan sendiri. |
+
+**Pengukuran:** pada dua run suite penuh berturut-turut di database terpisah, hasilnya `1 failed / 354 passed` lalu `355 passed / 0 failed`. Jumlah uji naik karena pekerjaan Fase 7 masuk di antaranya. Jadi kegagalannya berpindah, bukan menetap — ini nondeterminisme, bukan regresi.
+
+**Petunjuk akar masalah yang sudah ditemukan:**
+1. `BerkasService` baris 89 membaca `foto_max_sisi_px` **dari pengaturan** (bisa 200–2000), bukan konstanta — jadi hasil pengecilan foto bergantung pada nilai pengaturan saat uji berjalan.
+2. Uji `tests/Feature/Fase1/InfoSekolahTest.php:183` memang **mengubah** `foto_max_sisi_px` (menjadi 720) — bukti bahwa pengaturan ini disentuh uji.
+3. **Hipotesis cache SUDAH DIUJI DAN DITOLAK.** Dugaan awal saya adalah nilai pengaturan bocor lewat `Cache::remember('pengaturan:semua')` di `PengaturanService` karena `RefreshDatabase` hanya me-reset database. Itu **salah**: `phpunit.xml` menetapkan `CACHE_STORE=array`, dan store array di-reset setiap uji karena aplikasi dibangun ulang per uji. Jadi nilai pengaturan selalu berasal dari database yang bersih — cache bukan penyebabnya.
+4. Sisa kemungkinan yang belum diuji: (a) efek samping `Storage` pada disk sungguhan yang bocor antar uji (mis. uji yang menghapus berkas atau memakai `Storage::fake` tanpa dipulihkan), atau (b) kegagalan intermiten nyata pada pemrosesan gambar — yang bila benar berarti **cacat produk**, bukan sekadar uji: sesekali foto pengguna tersimpan tanpa diperkecil dan melampaui batas BR-29.
+
+**Langkah perbaikan yang disarankan** (urut dari paling mungkin):
+1. Jalankan `vendor/bin/pest --order-by=random` berulang kali untuk menemukan pasangan uji yang saling mengotori, lalu periksa uji yang menyentuh `Storage`/berkas.
+2. Uji yang mengubah pengaturan atau menghapus berkas wajib memulihkan keadaannya.
+3. Periksa apakah ada jalur **gagal-senyap** pada pengecilan gambar yang menyimpan gambar asli ketika pemrosesan gagal — bila ada, itu cacat produk yang harus diperbaiki (bukan hanya ujinya).
+4. Baru setelah itu perkuat `teksPdf()` untuk uji KP-5.2.
+
+**Cara memverifikasi terpisah tanpa mengganggu pekerjaan lain** (berguna karena database uji dipakai bersama): buat salinan `phpunit.xml` dengan `DB_DATABASE` berbeda, jalankan `artisan test -c phpunit.<nama>.xml`, lalu hapus salinan dan database itu. Jangan lupa `phpunit.xml` memakai `force="true"` sehingga variabel lingkungan biasa TIDAK dapat menimpanya.
