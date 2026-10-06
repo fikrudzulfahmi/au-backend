@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\V1\Pengaturan\PenandatanganController;
 use App\Http\Controllers\Api\V1\Pengaturan\PengaturanSekolahController;
 use App\Http\Controllers\Api\V1\Pengaturan\PengaturanTtdController;
 use App\Http\Controllers\Api\V1\Pengaturan\PenggunaController;
+use App\Http\Controllers\Api\V1\Pengumuman\PengumumanController;
 use App\Http\Controllers\Api\V1\Plotting\PlottingKelasController;
 use App\Http\Controllers\Api\V1\Plotting\PlottingMapelController;
 use App\Http\Controllers\Api\V1\Presensi\JamKerjaController;
@@ -30,7 +31,10 @@ use App\Http\Controllers\Api\V1\Presensi\MonitoringPresensiController;
 use App\Http\Controllers\Api\V1\Presensi\PengajuanIzinController;
 use App\Http\Controllers\Api\V1\Presensi\PengajuanLuarRadiusController;
 use App\Http\Controllers\Api\V1\Presensi\PresensiController;
+use App\Http\Controllers\Api\V1\PublikPengumumanController;
 use App\Http\Controllers\Api\V1\PublikSekolahController;
+use App\Http\Controllers\Api\V1\Tv\PengaturanTvController;
+use App\Http\Controllers\Api\V1\Tv\TvController;
 use App\Http\Controllers\Api\V1\WaktuServerController;
 use Illuminate\Support\Facades\Route;
 
@@ -50,6 +54,18 @@ Route::prefix('v1')->group(function (): void {
     /* ---------------------------------------------------------------- publik */
     Route::get('/waktu-server', [WaktuServerController::class, 'show'])->name('waktu-server');
     Route::get('/publik/sekolah', [PublikSekolahController::class, 'show'])->name('publik.sekolah');
+    // FR-LND-05/09 — pengumuman bertanda `tampil_landing` (BR-34). Tanpa login.
+    Route::get('/publik/pengumuman', [PublikPengumumanController::class, 'index'])->name('publik.pengumuman');
+
+    /* ------------------------------------------------------- layar TV (5.19) */
+    // FR-TV-02 — masuk dengan kode TV/NPSN; BR-32 mengunci 5×/menit/IP.
+    Route::post('/tv/masuk', [TvController::class, 'masuk'])->name('tv.masuk');
+
+    // BR-32 — hanya token TV yang diterima di sini; token Sanctum ditolak.
+    Route::middleware('tv')->prefix('tv')->group(function (): void {
+        Route::get('/rekap', [TvController::class, 'rekap'])->name('tv.rekap');
+        Route::get('/tampilan', [TvController::class, 'tampilan'])->name('tv.tampilan');
+    });
 
     /* ---------------------------------------------- autentikasi (3.4, FR-SEC) */
     Route::post('/auth/login', [AuthController::class, 'login'])
@@ -377,5 +393,34 @@ Route::prefix('v1')->group(function (): void {
             // pengelolaannya sendiri tetap hanya untuk admin.
             Route::get('/pengaturan-dokumen', [LaporanDokumenController::class, 'pengaturan']);
         });
+    });
+
+    /* ===================================================================
+     | FASE 6 — Pengumuman (5.20), Layar TV (5.19), Landing (5.21)
+     |================================================================= */
+
+    Route::middleware('auth:sanctum')->group(function (): void {
+        // FR-PMN-02 — semua pengguna login melihat pengumuman aktif di beranda.
+        Route::get('/pengumuman/aktif', [PengumumanController::class, 'aktif']);
+    });
+
+    // FR-PMN-02 — hanya admin & kepala sekolah yang mengelola pengumuman.
+    Route::middleware('auth:sanctum', 'peran:admin,kepala_sekolah')->group(function (): void {
+        Route::get('/pengumuman', [PengumumanController::class, 'index']);
+        Route::post('/pengumuman', [PengumumanController::class, 'store']);
+        Route::put('/pengumuman/{pengumuman}', [PengumumanController::class, 'update']);
+        Route::patch('/pengumuman/{pengumuman}', [PengumumanController::class, 'update']);
+        Route::delete('/pengumuman/{pengumuman}', [PengumumanController::class, 'destroy']);
+    });
+
+    // FR-TV-16 — pengaturan Layar TV; admin saja (termasuk kode & sesi TV).
+    Route::middleware('auth:sanctum', 'peran:admin')->prefix('pengaturan/tv')->group(function (): void {
+        Route::get('/', [PengaturanTvController::class, 'show']);
+        Route::put('/', [PengaturanTvController::class, 'simpan']);
+        Route::get('/kode', [PengaturanTvController::class, 'kode']);
+        Route::post('/kode/buat-ulang', [PengaturanTvController::class, 'buatUlangKode']);
+        Route::get('/sesi', [PengaturanTvController::class, 'sesi']);
+        Route::delete('/sesi/{sesiTv}', [PengaturanTvController::class, 'cabut']);
+        Route::get('/pratinjau', [PengaturanTvController::class, 'pratinjau']);
     });
 });

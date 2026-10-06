@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Exceptions\AturanBisnisException;
+use App\Http\Middleware\AutentikasiTv;
 use App\Http\Middleware\CatatPermintaanApi;
 use App\Http\Middleware\PastikanPeran;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -25,6 +26,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // 3.2 — middleware `peran` untuk otorisasi berbasis peran (dicek di server).
         $middleware->alias([
             'peran' => PastikanPeran::class,
+            // BR-32 — token TV hanya berlaku pada endpoint `tv`.
+            'tv' => AutentikasiTv::class,
         ]);
 
         // 9 — pencatatan permintaan API.
