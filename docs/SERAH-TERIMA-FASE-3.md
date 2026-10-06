@@ -111,8 +111,38 @@ Sesuai `FR-LOK` (5.10), `FR-PRS` (5.11), `FR-IZN` (5.12) dan tabel 7.4:
 
 - **Advisory dependensi (dev saja):** `vitest` 3.2.7, `tinypool`, `@vitest/mocker`.
   Tidak ikut ke bundel produksi. Perbaikannya menuntut vitest 5.x (breaking).
-- **Ukuran bundel** frontend 967 KiB precache; bundel utama sedikit di atas ambang saran
-  Vite (500 kB). Dapat dirapikan dengan code-splitting bila perlu.
+- **Ukuran bundel frontend (ditunda — keputusan pemilik, 6 Oktober 2026).**
+  Kondisi terukur pada `au-frontend` commit `775011d`:
+
+  | Bagian | Ukuran | Gzip |
+  |---|---|---|
+  | `index-BBV1YSPP.js` (bundel utama) | **580,76 kB** | 165,86 kB |
+  | `leaflet-src-C8_wPyq5.js` | 150,05 kB | 43,59 kB |
+  | `LandingPage-nCmY3U84.js` | 14,81 kB | 4,42 kB |
+  | `index-B6F-SL7P.css` | 67,39 kB | 19,90 kB |
+  | precache PWA | 967,46 KiB | 33 entri |
+
+  Ambang saran Vite adalah 500 kB, jadi peringatan `(!) Some chunks are larger than 500 kB`
+  muncul saat build. **Ini peringatan, bukan galat — build dan PWA tetap sukses.**
+  Pertumbuhannya: 526 kB (akhir Fase 0/1) → 580,76 kB (akhir Fase 2), yaitu **+55 kB**.
+  Penyebabnya halaman-halaman Fase 2 diimpor secara statis pada `src/app/router.tsx`,
+  sehingga semuanya ikut ke bundel awal meski peran pengguna tidak pernah membukanya.
+
+  Perbaikan yang disarankan, dari yang paling menguntungkan:
+  1. **`React.lazy` + `<Suspense>` per rute** pada `src/app/router.tsx`. Ini yang paling
+     besar hasilnya karena memecah halaman terberat. Kandidat pertama:
+     `JadwalPage`, `PlottingKelasPage`, `PlottingMapelPage`, `NaikKelasPage`,
+     `JamPelajaranPage`, lalu halaman `master/*`.
+  2. **`build.rollupOptions.output.manualChunks`** pada `vite.config.ts` untuk memisahkan
+     vendor (react, `@tanstack/react-query`, dsb) agar tidak ikut berubah setiap rilis.
+  3. `build.chunkSizeWarningLimit` — **jangan** dipakai untuk menyembunyikan peringatan;
+     ini hanya menaikkan ambang tanpa memperbaiki apa pun.
+
+  Rambu sebelum mengerjakan: code-splitting mengubah pengalaman pemuatan (muncul
+  `Suspense` fallback singkat), jadi harus diuji di peramban — bukan hanya lewat build —
+  terutama pada jaringan sekolah yang lambat. Ukur ulang dengan `npm run build` dan
+  bandingkan angka pada tabel di atas. Jangan kerjakan bersamaan dengan perubahan fitur,
+  supaya jelas mana yang menurunkan ukuran bundel.
 - **Ekspor PDF** master data & laporan baru dikerjakan Fase 5 (memerlukan kop & tanda
   tangan). Permintaan `format=pdf` pada Fase 1 dijawab 422 dengan pesan jelas, bukan 500.
 - **npm `allow-remote`**: `.npmrc` pada repo frontend menyetel `allow-remote=all` karena
