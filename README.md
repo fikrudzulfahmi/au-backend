@@ -29,6 +29,20 @@ untuk repo backend.
 
 ---
 
+## Dokumentasi
+
+| Dokumen | Isi |
+|---|---|
+| [`docs/PANDUAN-INSTALASI.md`](docs/PANDUAN-INSTALASI.md) | Pemasangan, konfigurasi `.env`, migrasi/seeder, menjalankan server & uji, catatan produksi cPanel |
+| [`docs/PANDUAN-PENGGUNA-ADMIN.md`](docs/PANDUAN-PENGGUNA-ADMIN.md) | Master data, plotting & jadwal, lokasi/jam kerja, kop & TTD, pengumuman, layar TV, monitoring, laporan, audit log |
+| [`docs/PANDUAN-PENGGUNA-GURU.md`](docs/PANDUAN-PENGGUNA-GURU.md) | Presensi masuk/pulang, pengajuan izin/dinas, jurnal + presensi siswa, rekap kelas wali |
+| [`docs/PANDUAN-PENGGUNA-PEGAWAI.md`](docs/PANDUAN-PENGGUNA-PEGAWAI.md) | Presensi harian, pengajuan, riwayat untuk peran pegawai struktural |
+| [`docs/PANDUAN-BACKUP.md`](docs/PANDUAN-BACKUP.md) | Apa yang dicadangkan, cara mencadangkan & memulihkan, hubungannya dengan retensi foto (BR-30) |
+| [`docs/BATASAN-DETEKSI-FAKE-GPS.md`](docs/BATASAN-DETEKSI-FAKE-GPS.md) | Batasan deteksi fake GPS (FR-SEC-08) yang harus dipahami pengelola |
+| [`CATATAN-KEPUTUSAN.md`](CATATAN-KEPUTUSAN.md) | Keputusan & penyimpangan dari spesifikasi |
+
+---
+
 ## 1. Prasyarat
 
 | Perangkat | Versi | Keterangan |
