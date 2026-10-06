@@ -6,6 +6,9 @@ use App\Http\Controllers\Api\V1\Akademik\JadwalController;
 use App\Http\Controllers\Api\V1\Akademik\JamPelajaranController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\Jurnal\JurnalController;
+use App\Http\Controllers\Api\V1\Laporan\LaporanDokumenController;
+use App\Http\Controllers\Api\V1\Laporan\LaporanJurnalController;
+use App\Http\Controllers\Api\V1\Laporan\LaporanPresensiController;
 use App\Http\Controllers\Api\V1\Master\HariLiburController;
 use App\Http\Controllers\Api\V1\Master\JurusanController;
 use App\Http\Controllers\Api\V1\Master\KelasController;
@@ -15,7 +18,9 @@ use App\Http\Controllers\Api\V1\Master\SemesterController;
 use App\Http\Controllers\Api\V1\Master\SiswaController;
 use App\Http\Controllers\Api\V1\Master\TahunPelajaranController;
 use App\Http\Controllers\Api\V1\Pengaturan\AuditLogController;
+use App\Http\Controllers\Api\V1\Pengaturan\PenandatanganController;
 use App\Http\Controllers\Api\V1\Pengaturan\PengaturanSekolahController;
+use App\Http\Controllers\Api\V1\Pengaturan\PengaturanTtdController;
 use App\Http\Controllers\Api\V1\Pengaturan\PenggunaController;
 use App\Http\Controllers\Api\V1\Plotting\PlottingKelasController;
 use App\Http\Controllers\Api\V1\Plotting\PlottingMapelController;
@@ -135,6 +140,17 @@ Route::prefix('v1')->group(function (): void {
             Route::put('/pengaturan/landing', [PengaturanSekolahController::class, 'simpanLanding']);
             Route::get('/pengaturan/sistem', [PengaturanSekolahController::class, 'sistem']);
             Route::put('/pengaturan/sistem', [PengaturanSekolahController::class, 'simpanSistem']);
+
+            /* ------------------------------------ kop surat & tanda tangan (5.15) */
+            // FR-KOP-03/04/05 — penandatangan, tata letak, dan pratinjau. Admin saja.
+            Route::get('/pengaturan/ttd', [PengaturanTtdController::class, 'show']);
+            Route::put('/pengaturan/ttd', [PengaturanTtdController::class, 'simpan']);
+            Route::post('/pengaturan/kop/pratinjau', [PengaturanTtdController::class, 'pratinjau']);
+
+            Route::get('/pengaturan/penandatangan', [PenandatanganController::class, 'index']);
+            Route::post('/pengaturan/penandatangan', [PenandatanganController::class, 'store']);
+            Route::put('/pengaturan/penandatangan/{penandatangan}', [PenandatanganController::class, 'update']);
+            Route::delete('/pengaturan/penandatangan/{penandatangan}', [PenandatanganController::class, 'destroy']);
 
             Route::get('/pengaturan/audit-log', [AuditLogController::class, 'index']);
             Route::get('/pengaturan/audit-log/aksi', [AuditLogController::class, 'aksi']);
@@ -322,6 +338,44 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/{jurnal}', [JurnalController::class, 'tampil'])->whereNumber('jurnal');
             Route::put('/{jurnal}', [JurnalController::class, 'perbarui'])->whereNumber('jurnal');
             Route::get('/{jurnal}/presensi-siswa', [JurnalController::class, 'presensiSiswa'])->whereNumber('jurnal');
+        });
+
+        /* ===================================================================
+         | FASE 5 — Laporan & dokumen resmi (5.14, matriks Bagian 2)
+         |
+         | Semua laporan: JSON untuk web, plus `?format=pdf` / `?format=excel`
+         | (KP-5.1). Endpoint laporan dibuat TERSENDIRI — bukan memakai endpoint
+         | `/jurnal` — karena kepala sekolah & wakasek hanya punya hak lihat pada
+         | laporan, bukan pada endpoint jurnal (matriks Bagian 2).
+         |================================================================= */
+        Route::prefix('laporan')->group(function (): void {
+            // Laporan presensi pegawai — admin K, kepsek L, wakasek L,
+            // guru & pegawai struktural L(S) (hanya dirinya sendiri).
+            Route::middleware('peran:admin,kepala_sekolah,wakasek_kurikulum,guru,pegawai_struktural')->group(function (): void {
+                Route::get('/presensi/rekap-pegawai', [LaporanPresensiController::class, 'rekapPegawai']);
+                Route::get('/presensi/detail-pegawai', [LaporanPresensiController::class, 'detailPegawai']);
+                Route::get('/presensi/harian', [LaporanPresensiController::class, 'harian']);
+                Route::get('/presensi/rekap-izin', [LaporanPresensiController::class, 'rekapIzin']);
+                Route::get('/presensi/rekap-luar-radius', [LaporanPresensiController::class, 'rekapLuarRadius']);
+            });
+
+            // Laporan jurnal & presensi siswa — pegawai struktural TIDAK berhak.
+            Route::middleware('peran:admin,kepala_sekolah,wakasek_kurikulum,guru')->group(function (): void {
+                Route::get('/jurnal/rekap-siswa', [LaporanJurnalController::class, 'rekapSiswa']);
+                Route::get('/jurnal/daftar', [LaporanJurnalController::class, 'daftar']);
+                Route::get('/jurnal/kepatuhan', [LaporanJurnalController::class, 'kepatuhan']);
+                Route::get('/jurnal/jam-mengajar', [LaporanJurnalController::class, 'jamMengajar']);
+            });
+
+            // KP-5.5 — rekap presensi siswa kelas wali: hanya guru, dan hanya
+            // untuk kelas yang ia ampu sebagai wali kelas.
+            Route::middleware('peran:guru')->group(function (): void {
+                Route::get('/kelas-wali/rekap-siswa', [LaporanJurnalController::class, 'rekapSiswa']);
+            });
+
+            // Pengaturan kop & tanda tangan yang boleh dibaca pembuka laporan;
+            // pengelolaannya sendiri tetap hanya untuk admin.
+            Route::get('/pengaturan-dokumen', [LaporanDokumenController::class, 'pengaturan']);
         });
     });
 });

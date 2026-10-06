@@ -70,14 +70,31 @@ class JurnalService
             ->where('semester_id', $semester->id)
             ->where('pegawai_id', $guru->id)
             ->where('hari', $hari)
-            ->get()
+            ->get();
+
+        return $this->tandaiStatus($guru, $semester, $tanggal, $this->gabungSesi($jadwal));
+    }
+
+    /**
+     * Menggabungkan entri jadwal menjadi daftar sesi (FR-JRN-01).
+     *
+     * Dipisah menjadi publik karena laporan kepatuhan jurnal (FR-LAP-08) perlu
+     * membentuk sesi yang sama dari jadwal yang sudah diambilnya sekaligus —
+     * memakai ulang aturan penggabungan ini menjamin keduanya tidak pernah berbeda.
+     *
+     * @param  Collection<int, Jadwal>  $jadwal
+     * @return list<array<string, mixed>>
+     */
+    public function gabungSesi(Collection $jadwal): array
+    {
+        $urut = $jadwal
             ->filter(fn (Jadwal $j): bool => $j->slotJam?->jam_ke !== null)
             ->sortBy(fn (Jadwal $j): int => (int) $j->slotJam->urutan)
             ->values();
 
         $sesi = [];
 
-        foreach ($jadwal as $j) {
+        foreach ($urut as $j) {
             $jamKe = (int) $j->slotJam->jam_ke;
             $akhir = count($sesi) - 1;
 
@@ -105,7 +122,28 @@ class JurnalService
             ];
         }
 
-        return $this->tandaiStatus($guru, $semester, $tanggal, $sesi);
+        return $sesi;
+    }
+
+    /**
+     * Mengambil jadwal beberapa guru sekaligus, dikelompokkan [pegawai_id][hari].
+     *
+     * Dipakai laporan kepatuhan jurnal (FR-LAP-08) agar tidak melakukan query per
+     * (guru × tanggal); penggabungan sesinya tetap lewat `gabungSesi()` sehingga
+     * hasilnya identik dengan daftar sesi pada halaman isi jurnal.
+     *
+     * @param  list<int>  $pegawaiIds
+     * @return Collection<int, Collection<int, Collection<int, Jadwal>>>
+     */
+    public function sesiPersiapanJadwal(Semester $semester, array $pegawaiIds): Collection
+    {
+        return Jadwal::query()
+            ->with(['slotJam', 'plottingMapel.mapel:id,kode,nama', 'plottingMapel.kelas:id,nama'])
+            ->where('semester_id', $semester->id)
+            ->whereIn('pegawai_id', $pegawaiIds)
+            ->get()
+            ->groupBy('pegawai_id')
+            ->map(fn (Collection $perGuru): Collection => $perGuru->groupBy('hari'));
     }
 
     /**
@@ -482,12 +520,17 @@ class JurnalService
      *
      * @return array{ringkasan: array<string, int>, siswa: list<array<string, mixed>>, sesi: int}
      */
-    public function rekapPresensiSiswa(Semester $semester, int $kelasId, ?string $dari, ?string $sampai): array
+    public function rekapPresensiSiswa(Semester $semester, int $kelasId, ?string $dari, ?string $sampai, ?int $mapelId = null): array
     {
         $jurnal = Jurnal::query()
             ->where('semester_id', $semester->id)
             ->untukKelas($kelasId)
             ->rentangTanggal($dari, $sampai)
+            // FR-LAP-06 — rekap dapat difilter per mata pelajaran.
+            ->when($mapelId !== null, fn ($q) => $q->whereHas(
+                'plottingMapel',
+                fn ($m) => $m->where('mapel_id', $mapelId)
+            ))
             ->orderBy('tanggal')
             ->orderBy('jam_ke_mulai')
             ->get(['id', 'tanggal', 'jam_ke_mulai', 'jam_ke_selesai', 'plotting_mapel_id']);

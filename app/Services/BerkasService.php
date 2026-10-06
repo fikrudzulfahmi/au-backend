@@ -159,6 +159,32 @@ class BerkasService
         return $isi;
     }
 
+    /**
+     * FR-KOP-03 — gambar tanda tangan & stempel disimpan sebagai PNG agar latar
+     * transparan tetap terjaga (tanda tangan digital ditumpuk di atas dokumen).
+     *
+     * Berbeda dari `simpanGambarTerkompres()` yang selalu menjadi JPEG (sehingga
+     * kehilangan alpha), jalur ini mempertahankan PNG.
+     */
+    public function simpanGambarPng(UploadedFile $berkas, string $folder, int $sisiMaks = 600): string
+    {
+        if (! $berkas->isValid()) {
+            throw new RuntimeException('Berkas gagal diunggah. Silakan coba lagi.');
+        }
+
+        if ($berkas->getSize() > self::MAKS_MASUKAN_BYTE) {
+            throw new RuntimeException('Ukuran gambar melebihi 1 MB. Perkecil gambar terlebih dahulu.');
+        }
+
+        $gambar = ImageManager::gd()->read($berkas->getRealPath());
+        $gambar->scaleDown(width: $sisiMaks, height: $sisiMaks);
+
+        $relatif = trim($folder, '/').'/'.uniqid('ttd_', true).'.png';
+        Storage::disk('local')->put($relatif, (string) $gambar->toPng());
+
+        return $relatif;
+    }
+
     /** Menghapus berkas tanpa melempar galat bila tidak ada. */
     public function hapus(?string $path): void
     {

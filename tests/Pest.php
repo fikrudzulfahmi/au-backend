@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\HariLibur;
 use App\Models\Jadwal;
 use App\Models\JamKerja;
 use App\Models\Jurusan;
@@ -9,11 +10,15 @@ use App\Models\Kelas;
 use App\Models\LokasiPresensi;
 use App\Models\Mapel;
 use App\Models\Pegawai;
+use App\Models\Penandatangan;
+use App\Models\PengajuanIzin;
+use App\Models\PengaturanTtd;
 use App\Models\PlottingKelas;
 use App\Models\PlottingMapel;
 use App\Models\PolaJam;
 use App\Models\PolaJamHari;
 use App\Models\PresensiPegawai;
+use App\Models\ProfilSekolah;
 use App\Models\Role;
 use App\Models\Semester;
 use App\Models\Siswa;
@@ -510,4 +515,138 @@ function badanJurnal(array $rangkaian, array $siswa = [], array $ganti = []): ar
         'kegiatan' => 'Kegiatan pembelajaran uji.',
         'presensi' => $presensi,
     ], $ganti);
+}
+
+/*
+|--------------------------------------------------------------------------
+| Helper Fase 5 — laporan & dokumen resmi
+|--------------------------------------------------------------------------
+*/
+
+/**
+ * Memasang jam kerja Senin–Jumat sebagai hari kerja untuk satu jenis pegawai
+ * (sabtu & minggu libur). Dipakai uji BR-24 (alpa) dan BR-26 (kepatuhan jurnal)
+ * yang membutuhkan penanda `is_hari_kerja` tanpa memerlukan rangkaian presensi.
+ */
+function pasangJamKerja(string $jenisPegawai = Pegawai::JENIS_GURU): void
+{
+    foreach (range(1, 7) as $hari) {
+        $kerja = $hari <= 5;
+
+        JamKerja::factory()->create([
+            'jenis_pegawai' => $jenisPegawai,
+            'hari' => $hari,
+            'is_hari_kerja' => $kerja,
+            'buka_presensi' => $kerja ? '06:30:00' : null,
+            'jam_masuk' => $kerja ? '07:00:00' : null,
+            'jam_pulang' => $kerja ? '15:00:00' : null,
+        ]);
+    }
+}
+
+/** Menandai satu tanggal (atau rentang) sebagai hari libur pada tahun pelajaran. */
+function tandaiLibur(TahunPelajaran $tahun, string $dari, ?string $sampai = null, string $keterangan = 'Libur Uji'): HariLibur
+{
+    return HariLibur::factory()->create([
+        'tahun_pelajaran_id' => $tahun->id,
+        'tanggal_mulai' => $dari,
+        'tanggal_selesai' => $sampai ?? $dari,
+        'keterangan' => $keterangan,
+    ]);
+}
+
+/**
+ * Mengajukan izin/sakit/cuti/dinas yang sudah disetujui untuk seorang pegawai.
+ */
+function setujuiIzin(
+    Pegawai $pegawai,
+    string $dari,
+    ?string $sampai = null,
+    string $jenis = PengajuanIzin::JENIS_IZIN,
+    string $status = PengajuanIzin::STATUS_DISETUJUI,
+): PengajuanIzin {
+    return PengajuanIzin::factory()->create([
+        'pegawai_id' => $pegawai->id,
+        'jenis' => $jenis,
+        'tanggal_mulai' => $dari,
+        'tanggal_selesai' => $sampai ?? $dari,
+        'status' => $status,
+    ]);
+}
+
+/** Profil sekolah tunggal beserta kop surat dasarnya. */
+function profilSekolah(array $atribut = []): ProfilSekolah
+{
+    return ProfilSekolah::factory()->create(array_merge([
+        'nama_sekolah' => 'SMK Uji SIPANDU',
+        'kop_baris1' => 'PEMERINTAH PROVINSI JAWA TIMUR',
+        'kop_baris2' => 'DINAS PENDIDIKAN',
+        'kop_baris3' => 'SMK UJI SIPANDU',
+    ], $atribut));
+}
+
+/** Tata letak tanda tangan tunggal (FR-KOP-04). */
+function tataTtd(array $atribut = []): PengaturanTtd
+{
+    return PengaturanTtd::query()->create(array_merge([
+        'kota_penetapan' => 'Surabaya',
+        'mode_tanggal' => 'otomatis',
+        'posisi' => 'kanan',
+        'tampilkan_mengetahui' => false,
+    ], $atribut));
+}
+
+/** Penandatangan dokumen resmi (FR-KOP-03). */
+function penandatangan(array $atribut = []): Penandatangan
+{
+    return Penandatangan::query()->create(array_merge([
+        'jabatan' => 'Kepala Sekolah',
+        'nama' => 'Drs. Contoh Kepala',
+        'nip' => '197001012000031001',
+        'urutan' => 1,
+        'is_default' => true,
+        'is_active' => true,
+    ], $atribut));
+}
+
+/**
+ * Membaca teks dari berkas PDF yang SUDAH dikompresi (Opsi A, K-70).
+ *
+ * Aliran FlateDecode dikembangkan memakai zlib, lalu literal teks PDF
+ * `(...)` diambil dan pasangan byte UTF-16BE (0x00 di antara ASCII) dibuang
+ * sehingga kata seperti "REKAP" dapat dicari sebagai teks biasa. Dipakai uji
+ * untuk membuktikan dokumen yang BENAR-BENAR dibuat memuat judul, periode,
+ * tanggal cetak, dan nama penandatangan.
+ */
+function teksPdf(string $pdf): string
+{
+    preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $pdf, $cocok);
+
+    $isi = '';
+
+    foreach ($cocok[1] as $aliran) {
+        $urai = @gzuncompress($aliran);
+
+        if ($urai === false) {
+            $urai = @gzinflate($aliran);
+        }
+
+        if ($urai !== false) {
+            $isi .= $urai."\n";
+        }
+    }
+
+    // Ambil seluruh literal teks PDF: ( ... ) Tj / TJ.
+    preg_match_all('/\((?:\\\\.|[^()\\\\])*\)/s', $isi, $literal);
+
+    $teks = '';
+
+    foreach ($literal[0] as $l) {
+        $isiLiter = substr($l, 1, -1);
+        $isiLiter = str_replace(['\\(', '\\)', '\\\\'], ['(', ')', '\\'], $isiLiter);
+        // UTF-16BE: setiap ASCII didahului byte 0x00 — buang byte kosongnya.
+        $teks .= str_replace("\x00", '', $isiLiter).' ';
+    }
+
+    return $teks;
 }
