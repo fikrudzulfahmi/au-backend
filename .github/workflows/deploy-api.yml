@@ -1,0 +1,200 @@
+# Deploy API (Laravel) ke api-sipandu.smkiau.sch.id.
+# Repo standalone (au-backend): berkas DIUNGGAH dari runner (bukan git pull di server),
+# sehingga .env / vendor/ / storage/ / bootstrap/cache/ TIDAK pernah tersentuh.
+# Semua kegagalan ditulis ::error:: agar terbaca di tab "Annotations".
+name: Deploy API (Laravel)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      fresh:
+        description: 'BANGUN ULANG DATABASE KOSONG (migrate:fresh) + seeder produksi. Centang hanya untuk instalasi pertama / reset data.'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PHP_BIN: ${{ secrets.PHP_BIN }}
+      DEPLOY_PATH_API: ${{ secrets.DEPLOY_PATH_API }}
+      APP_URL: ${{ secrets.APP_URL }}
+
+    steps:
+      - name: Periksa secrets wajib
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          DEPLOY_PATH_API: ${{ secrets.DEPLOY_PATH_API }}
+        run: |
+          gagal=0
+          for s in SSH_HOST SSH_USER SSH_KEY DEPLOY_PATH_API; do
+            if [ -z "${!s}" ]; then echo "::error::Secret $s belum diisi di Settings → Secrets and variables → Actions"; gagal=1; fi
+          done
+          exit $gagal
+
+      - uses: actions/checkout@v4
+
+      - name: Buang .git agar tidak ikut terunggah ke produksi
+        run: rm -rf .git
+
+      - name: Unggah berkas aplikasi
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          # '.' (direktori, bukan glob) supaya berkas titik seperti public/.htaccess ikut;
+          # strip_components: 1 membuang awalan "./".
+          source: '.'
+          target: ${{ secrets.DEPLOY_PATH_API }}
+          strip_components: 1
+          overwrite: true
+
+      - name: Pasang dependensi & migrasi (SSH)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          envs: PHP_BIN,DEPLOY_PATH_API
+          script: |
+            set -e
+            PHP_BIN="${PHP_BIN:-php}"
+
+            # --- pilih biner PHP yang memadai (Laravel 12 butuh >= 8.3) ---
+            if [ ! -x "$PHP_BIN" ] && ! command -v "$PHP_BIN" >/dev/null 2>&1; then
+              PHP_BIN="$(command -v php 2>/dev/null || echo php)"
+            fi
+            if ! "$PHP_BIN" -r 'exit(PHP_VERSION_ID >= 80300 ? 0 : 1);' 2>/dev/null; then
+              for kandidat in /opt/cpanel/ea-php83/root/usr/bin/php /opt/cpanel/ea-php84/root/usr/bin/php; do
+                if [ -x "$kandidat" ] && "$kandidat" -r 'exit(PHP_VERSION_ID >= 80300 ? 0 : 1);' 2>/dev/null; then
+                  echo "::notice::PHP_BIN lebih tua dari 8.3 → memakai $kandidat. JANGAN LUPA ubah juga PHP subdomain API ke 8.3 di cPanel → MultiPHP Manager."
+                  PHP_BIN="$kandidat"; break
+                fi
+              done
+            fi
+            echo "PHP dipakai: $($PHP_BIN -v 2>/dev/null | head -1 || echo TIDAK_DITEMUKAN)"
+            if ! "$PHP_BIN" -r 'exit(PHP_VERSION_ID >= 80300 ? 0 : 1);' 2>/dev/null; then
+              echo "::error title=PHP TERLALU TUA::Server hanya menyediakan PHP $($PHP_BIN -r 'echo PHP_VERSION;' 2>/dev/null). Set PHP 8.3 di cPanel → MultiPHP Manager lalu jalankan ulang."
+              exit 1
+            fi
+
+            [ -d "$DEPLOY_PATH_API" ] || { echo "::error title=FOLDER DEPLOY TIDAK ADA::$DEPLOY_PATH_API tidak ditemukan (cek secret DEPLOY_PATH_API)."; exit 1; }
+            cd "$DEPLOY_PATH_API"
+            [ -f artisan ] || { echo "::error title=BUKAN APLIKASI LARAVEL::$DEPLOY_PATH_API tidak memuat artisan. Pastikan document root menunjuk folder public/ dan DEPLOY_PATH_API menunjuk root aplikasi."; exit 1; }
+            [ -f .env ] || { echo "::error title=.env TIDAK ADA::buat $DEPLOY_PATH_API/.env dari .env.example lalu jalankan ulang."; exit 1; }
+
+            # --- Composer: pakai yang ada, kalau belum ada unduh sendiri ---
+            if command -v composer >/dev/null 2>&1; then
+              set -- composer
+            elif [ -f "$HOME/composer.phar" ]; then
+              set -- "$PHP_BIN" "$HOME/composer.phar"
+            else
+              echo "== Composer belum ada — mengunduh ke folder home =="
+              if $PHP_BIN -r "copy('https://getcomposer.org/installer','/tmp/composer-setup.php');" 2>/tmp/composer-unduh.log \
+                 && $PHP_BIN /tmp/composer-setup.php --install-dir="$HOME" --filename=composer.phar --quiet 2>>/tmp/composer-unduh.log \
+                 && [ -f "$HOME/composer.phar" ]; then
+                set -- "$PHP_BIN" "$HOME/composer.phar"
+              else
+                echo "::error title=COMPOSER GAGAL DIPASANG::$(tail -c 300 /tmp/composer-unduh.log | tr '\n' ' ') — pasang manual composer.phar ke folder home server."
+                exit 1
+              fi
+            fi
+            export COMPOSER_MEMORY_LIMIT=-1
+
+            fase() {
+              label="$1"; shift
+              log=/tmp/fase.deploy.log
+              if "$@" >"$log" 2>&1; then echo "-- $label: OK"; tail -3 "$log"
+              else echo "::error title=GAGAL: $label::$(tail -c 400 "$log" | tr '\n' ' ')"; exit 1; fi
+            }
+
+            fase "composer install" "$@" install --no-dev --optimize-autoloader --no-interaction
+
+            if grep -q '^APP_KEY=base64:' .env 2>/dev/null; then echo "APP_KEY sudah ada, dilewati."
+            else fase "key:generate" $PHP_BIN artisan key:generate --force; fi
+
+            $PHP_BIN artisan config:clear >/dev/null 2>&1 || true
+
+            if [ "${{ github.event.inputs.fresh }}" = "true" ]; then
+              echo "MODE FRESH: seluruh tabel dibuang lalu dibangun ulang KOSONG."
+              fase "migrate:fresh" $PHP_BIN artisan migrate:fresh --force
+              fase "seeder produksi" $PHP_BIN artisan db:seed --class=ProductionSeeder --force
+
+              jumlah=$($PHP_BIN artisan tinker --execute="echo \App\Models\User::count();" 2>/dev/null | tail -1 | tr -d '[:space:]')
+              if [ "${jumlah:-0}" = "0" ]; then
+                echo "::warning title=TIDAK ADA AKUN::seeder menghasilkan 0 pengguna. Isi ADMIN_USERNAME & ADMIN_PASSWORD di .env server lalu jalankan ulang mode fresh."
+              else
+                echo "::notice title=AKUN SIAP::Jumlah akun pengguna: ${jumlah}. Login memakai ADMIN_USERNAME + ADMIN_PASSWORD dari .env server."
+              fi
+            else
+              if ! $PHP_BIN artisan migrate --force >/tmp/migrasi.log 2>&1; then
+                echo "::error title=MIGRASI GAGAL::$(tail -c 400 /tmp/migrasi.log | tr '\n' ' ') — 1050 (tabel sudah ada) ⇒ jalankan ulang dengan mode FRESH; 1071 (key too long) ⇒ perbaikan engine InnoDB belum ter-deploy."
+                exit 1
+              fi
+              tail -6 /tmp/migrasi.log
+            fi
+
+            $PHP_BIN artisan storage:link || true
+            fase "config:cache" $PHP_BIN artisan config:cache
+            fase "route:cache" $PHP_BIN artisan route:cache
+            fase "view:cache" $PHP_BIN artisan view:cache
+            fase "event:cache" $PHP_BIN artisan event:cache
+            $PHP_BIN artisan --version
+            echo "OK: deploy selesai"
+
+      - name: Diagnostik prasyarat (hanya bila gagal)
+        if: failure()
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          envs: PHP_BIN,DEPLOY_PATH_API
+          script: |
+            PHP_BIN="${PHP_BIN:-php}"
+            echo "::warning title=P1 PHP::PHP_BIN=${PHP_BIN} → $($PHP_BIN -v 2>/dev/null | head -1 || echo TIDAK_BISA_DIJALANKAN)"
+            cd "$DEPLOY_PATH_API" 2>/dev/null || { echo "::warning title=P2 FOLDER::$DEPLOY_PATH_API TIDAK ADA"; exit 0; }
+            echo "::warning title=P2 FOLDER::ada, isi: $(ls -a | head -12 | tr '\n' ' ')"
+            [ -f artisan ] && echo "::warning title=P3 ARTISAN::artisan ADA" || echo "::warning title=P3 ARTISAN::artisan TIDAK ADA"
+            [ -f .env ] && echo "::warning title=P4 ENV::.env ADA" || echo "::warning title=P4 ENV::.env TIDAK ADA"
+            if [ -f .env ]; then
+              echo "::warning title=P5 APP KEY::$(grep -q '^APP_KEY=base64:' .env && echo 'APP_KEY terisi' || echo 'APP_KEY KOSONG')"
+              echo "::warning title=P6 ENV PENTING::$(grep -E '^(APP_ENV|APP_DEBUG|APP_URL|DB_DATABASE|DB_USERNAME|ADMIN_USERNAME)=' .env | tr '\n' ' ')"
+              echo "::warning title=P6b ADMIN PASS::$(grep -qE '^ADMIN_PASSWORD=.+' .env && echo 'ADMIN_PASSWORD TERISI' || echo 'ADMIN_PASSWORD KOSONG')"
+            fi
+            [ -d vendor ] && echo "::warning title=P7 VENDOR::vendor/ ADA" || echo "::warning title=P7 VENDOR::vendor/ TIDAK ADA"
+            echo "::warning title=P9 PHP TERSEDIA::$(ls -d /opt/cpanel/ea-php*/ 2>/dev/null | tr '\n' ' ')"
+            for v in 84 83 82 81; do
+              bin="/opt/cpanel/ea-php$v/root/usr/bin/php"
+              [ -x "$bin" ] && echo "::warning title=P10 ea-php$v::$($bin -v 2>/dev/null | head -1)"
+            done
+            exit 0
+
+      - name: Cek API hidup
+        if: env.APP_URL != ''
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          set -e
+          kode=$(curl -s -o /dev/null -w '%{http_code}' -m 20 "$APP_URL/api/v1/waktu-server" || true)
+          echo "HTTP $kode dari $APP_URL/api/v1/waktu-server"
+          if [ "$kode" != "200" ]; then
+            echo "::error::API menjawab HTTP $kode. Cek docroot subdomain harus menunjuk folder public/, lalu lihat storage/logs/laravel.log di server."
+            exit 1
+          fi
+          echo "::notice::API sehat (HTTP 200)."
