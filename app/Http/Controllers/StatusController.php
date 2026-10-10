@@ -23,12 +23,12 @@ class StatusController extends Controller
         }
 
         return view('status', [
-            'namaApp'     => 'SIPANDU API',
-            'waktu'       => now()->format('d/m/Y H:i:s'),
-            'timezone'    => (string) config('app.timezone'),
-            'laravel'     => app()->version(),
-            'php'         => PHP_VERSION,
-            'lingkungan'  => (string) config('app.env'),
+            'namaApp' => 'SIPANDU API',
+            'waktu' => now()->format('d/m/Y H:i:s'),
+            'timezone' => (string) config('app.timezone'),
+            'laravel' => app()->version(),
+            'php' => PHP_VERSION,
+            'lingkungan' => (string) config('app.env'),
             'dbTerhubung' => $dbTerhubung,
         ]);
     }
