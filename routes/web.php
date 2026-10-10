@@ -1,5 +1,9 @@
 <?php
 
-// SIPANDU adalah backend khusus API. Seluruh rute HTTP berada di routes/api.php.
-// routes/web.php sengaja dikosongkan agar `php artisan route:cache` pada deploy
-// produksi tidak gagal (closure route tidak dapat di-serialize).
+use App\Http\Controllers\StatusController;
+use Illuminate\Support\Facades\Route;
+
+// Halaman status ringan di akar domain untuk memastikan backend hidup.
+// Rute ini memakai controller (bukan closure) agar `php artisan route:cache`
+// tetap berhasil pada deploy produksi.
+Route::get('/', [StatusController::class, 'index'])->name('status');
