@@ -27,6 +27,9 @@ class JurnalResource extends JsonResource
             'label_jam' => $this->labelJamKe(),
             'jam_ke_mulai' => (int) $this->jam_ke_mulai,
             'jam_ke_selesai' => (int) $this->jam_ke_selesai,
+            // Kunci sesi (FR-JRN-01). Dipakai frontend untuk menautkan baris riwayat
+            // ke halaman ubah jurnal: /mengajar/jurnal/isi/{plotting_mapel_id}-{jam_ke_mulai}.
+            'plotting_mapel_id' => (int) $this->plotting_mapel_id,
             'kelas_id' => (int) $this->kelas_id,
             'kelas' => $this->whenLoaded('kelas', fn () => $this->kelas?->nama),
             'mapel_id' => $this->whenLoaded('plottingMapel', fn () => $this->plottingMapel?->mapel_id),
