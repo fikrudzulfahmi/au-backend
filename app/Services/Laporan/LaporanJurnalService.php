@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Services\Laporan;
 
 use App\Models\JamKerja;
+use App\Models\Jadwal;
 use App\Models\Jurnal;
 use App\Models\Pegawai;
 use App\Models\PengajuanIzin;
+use App\Models\PresensiPegawai;
 use App\Models\PresensiSiswa;
 use App\Models\Semester;
 use App\Services\JamKerjaService;
@@ -326,6 +328,198 @@ final class LaporanJurnalService
                 ['label' => 'Guru', 'nilai' => count($baris)],
                 ['label' => 'Sesi', 'nilai' => array_sum(array_column($baris, 'jumlah_sesi'))],
                 ['label' => 'JP', 'nilai' => array_sum(array_column($baris, 'jumlah_jp'))],
+            ],
+        ];
+    }
+
+    /**
+     * Dasbor harian pengisian jurnal — kelas mana yang sesinya sudah diisi guru,
+     * mana yang masih kosong, dan mana yang berhalangan (izin disetujui).
+     *
+     * Berbeda dari `kepatuhanJurnal` yang menghitung per guru × periode, ini
+     * memotong satu tanggal dan mengelompokkan hasilnya per kelas, karena yang
+     * dicari pengguna adalah "kelas mana yang belum terisi hari ini".
+     *
+     * Semua data diambil sekali lalu diolah di memori — sama seperti
+     * `kepatuhanJurnal` — supaya jumlah query tetap konstan walau jumlah guru
+     * dan kelas bertambah.
+     *
+     * @return array<string, mixed>
+     */
+    public function harianKelas(Semester $semester, string $tanggal, ?int $kelasId = null): array
+    {
+        $hari = CarbonImmutable::parse($tanggal)->isoWeekday();
+        $t = CarbonImmutable::parse($tanggal);
+
+        // Hanya guru aktif: jadwal guru yang sudah nonaktif tidak dicetak di dasbor.
+        $jadwalPerGuru = Jadwal::query()
+            ->with([
+                'slotJam',
+                'pegawai:id,nip,nama',
+                'plottingMapel.mapel:id,kode,nama',
+                'plottingMapel.kelas:id,nama',
+            ])
+            ->where('semester_id', $semester->id)
+            ->where('hari', $hari)
+            ->when($kelasId !== null, fn ($q) => $q->where('kelas_id', $kelasId))
+            ->whereHas('pegawai', function ($q): void {
+                $q->where('is_active', true)
+                    ->where('jenis_pegawai', Pegawai::JENIS_GURU);
+            })
+            ->get()
+            ->groupBy(fn (Jadwal $j): int => (int) $j->pegawai_id);
+
+        $idGuru = $jadwalPerGuru->keys()->map(fn ($v): int => (int) $v)->all();
+
+        // Kunci unik sesi = plotting mapel + jam ke mulai (BR-21), jadi cukup
+        // tanpa pegawai_id.
+        $sudah = Jurnal::query()
+            ->where('semester_id', $semester->id)
+            ->whereDate('tanggal', $tanggal)
+            ->get(['id', 'plotting_mapel_id', 'jam_ke_mulai', 'materi'])
+            ->keyBy(fn (Jurnal $j): string => $j->plotting_mapel_id.':'.$j->jam_ke_mulai);
+
+        $izin = PengajuanIzin::query()
+            ->whereIn('pegawai_id', $idGuru)
+            ->where('status', PengajuanIzin::STATUS_DISETUJUI)
+            ->where('tanggal_mulai', '<=', $tanggal)
+            ->where('tanggal_selesai', '>=', $tanggal)
+            ->get()
+            ->groupBy(fn (PengajuanIzin $i): int => (int) $i->pegawai_id);
+
+        // BR-19 — guru yang sudah presensi masuk pada tanggal ini; dibaca sekali
+        // agar pengguna dapat membedakan "belum presensi" dan "sudah presensi
+        // tetapi belum mengisi jurnal".
+        $presensi = PresensiPegawai::query()
+            ->whereIn('pegawai_id', $idGuru)
+            ->whereDate('tanggal', $tanggal)
+            ->whereNotNull('masuk_waktu')
+            ->whereIn('masuk_validasi', PresensiPegawai::VALIDASI_DIHITUNG)
+            ->pluck('pegawai_id')
+            ->map(fn ($v): int => (int) $v)
+            ->all();
+
+        $sudahPresensi = array_flip($presensi);
+
+        $perKelas = [];
+        foreach ($jadwalPerGuru as $guruId => $daftarJadwal) {
+            $guru = $daftarJadwal->first()?->pegawai;
+            $izinHari = ($izin->get((int) $guruId) ?? collect())
+                ->first(fn (PengajuanIzin $i): bool => $i->mencakupTanggal($t));
+            $presensiAda = isset($sudahPresensi[(int) $guruId]);
+
+            foreach ($this->jurnal->gabungSesi($daftarJadwal) as $s) {
+                $kunci = $s['plotting_mapel_id'].':'.$s['jam_ke_mulai'];
+                $jurnal = $sudah->get($kunci);
+
+                if ($izinHari !== null) {
+                    $status = JurnalService::BERHALANGAN;
+                    $alasan = 'Berhalangan — '.$izinHari->labelJenis().' disetujui.';
+                } elseif ($jurnal !== null) {
+                    $status = JurnalService::SUDAH;
+                    $alasan = null;
+                } else {
+                    $status = JurnalService::BELUM;
+                    $alasan = $presensiAda ? null : 'Belum presensi masuk';
+                }
+
+                $kelasId = (int) $s['kelas_id'];
+                $perKelas[$kelasId] ??= [
+                    'kelas_id' => $kelasId,
+                    'nama' => $s['kelas'],
+                    'sesi' => 0,
+                    'sudah' => 0,
+                    'belum' => 0,
+                    'berhalangan' => 0,
+                    'daftar' => [],
+                ];
+
+                $perKelas[$kelasId]['sesi']++;
+                $perKelas[$kelasId][$status === JurnalService::SUDAH
+                    ? 'sudah'
+                    : ($status === JurnalService::BERHALANGAN ? 'berhalangan' : 'belum')]++;
+
+                $perKelas[$kelasId]['daftar'][] = [
+                    'plotting_mapel_id' => (int) $s['plotting_mapel_id'],
+                    'label_jam' => $this->jurnal->labelJamKe((int) $s['jam_ke_mulai'], (int) $s['jam_ke_selesai']),
+                    'jam_ke_mulai' => (int) $s['jam_ke_mulai'],
+                    'jam_ke_selesai' => (int) $s['jam_ke_selesai'],
+                    'mapel' => $s['mapel'],
+                    'kode_mapel' => $s['kode_mapel'],
+                    'guru_id' => (int) $guruId,
+                    'nip' => $guru?->nip,
+                    'guru' => $guru?->nama,
+                    'jurnal_id' => $jurnal?->id,
+                    'materi' => $jurnal?->materi,
+                    'status' => $status,
+                    'alasan' => $alasan,
+                ];
+            }
+        }
+
+        $kelas = collect($perKelas)
+            ->map(function (array $k): array {
+                usort($k['daftar'], fn (array $a, array $b): int => $a['jam_ke_mulai'] <=> $b['jam_ke_mulai']);
+
+                return $k;
+            })
+            ->sortBy(fn (array $k): string => (string) $k['nama'])
+            ->values()
+            ->all();
+
+        $jumlah = fn (string $kunci): int => array_sum(array_column($kelas, $kunci));
+        $sesi = $jumlah('sesi');
+        $berhalangan = $jumlah('berhalangan');
+        $hitung = [
+            'kelas' => count($kelas),
+            'sesi' => $sesi,
+            'sudah' => $jumlah('sudah'),
+            'belum' => $jumlah('belum'),
+            'berhalangan' => $berhalangan,
+            // BR-26 — sesi berhalangan dikeluarkan dari penyebut persentase.
+            'persen_terisi' => ($sesi - $berhalangan) > 0
+                ? round(100 * $jumlah('sudah') / ($sesi - $berhalangan), 1)
+                : null,
+        ];
+
+        $labelStatus = [
+            JurnalService::SUDAH => 'Sudah diisi',
+            JurnalService::BELUM => 'Belum terisi',
+            JurnalService::BERHALANGAN => 'Berhalangan',
+        ];
+
+        // Satu baris per sesi untuk cetak/ekspor; web membaca `kelas` untuk
+        // tampilan berkelompok, cetak membaca `kolom`/`baris` seperti laporan lain.
+        $baris = [];
+        foreach ($kelas as $k) {
+            foreach ($k['daftar'] as $s) {
+                $baris[] = [
+                    $k['nama'],
+                    $s['label_jam'],
+                    $s['mapel'],
+                    $s['guru'],
+                    $labelStatus[$s['status']] ?? $s['status'],
+                    $s['alasan'] ?? $s['materi'] ?? '-',
+                ];
+            }
+        }
+
+        return [
+            'kode' => 'FR-LAP-13',
+            'judul' => 'Pengisian Jurnal Harian',
+            'periode' => PeriodeLaporan::tanggalPanjang($t),
+            'tanggal' => $t->toDateString(),
+            'hari' => JamKerja::DAFTAR_HARI[$t->dayOfWeekIso] ?? null,
+            'hitung' => $hitung,
+            'kelas' => $kelas,
+            'kolom' => ['Kelas', 'Jam', 'Mapel', 'Guru', 'Status', 'Keterangan / Materi'],
+            'baris' => $baris,
+            'ringkasan' => [
+                ['label' => 'Kelas', 'nilai' => $hitung['kelas']],
+                ['label' => 'Sesi', 'nilai' => $hitung['sesi']],
+                ['label' => 'Terisi', 'nilai' => $hitung['sudah']],
+                ['label' => 'Belum', 'nilai' => $hitung['belum']],
+                ['label' => 'Berhalangan', 'nilai' => $hitung['berhalangan']],
             ],
         ];
     }

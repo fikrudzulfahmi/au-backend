@@ -36,6 +36,36 @@ final class LaporanJurnalController extends LaporanController
         parent::__construct($dokumen);
     }
 
+    /**
+     * Dasbor harian pengisian jurnal — kelas mana yang sesinya sudah diisi,
+     * mana yang masih kosong, dan mana yang berhalangan pada satu tanggal.
+     *
+     * Berbeda dari `kepatuhan` (per guru × periode), permintaan ini memotong
+     * satu tanggal lalu mengelompokkan per kelas; defaultnya hari ini.
+     *
+     * Otorisasi: pemantau saja (admin/kepsek/wakasek). Guru sengaja tidak
+     * dimasukkan karena laporan ini memperlihatkan jurnal guru lain — di luar
+     * pembatasan `L(S)` FR-LAP-12.
+     */
+    public function harian(Request $request): JsonResponse|Response
+    {
+        $data = $request->validate([
+            'tanggal' => ['nullable', 'date_format:Y-m-d'],
+            'kelas_id' => ['nullable', 'integer', 'exists:kelas,id'],
+            'semester_id' => ['nullable', 'integer', 'exists:semester,id'],
+        ], [
+            'tanggal.date_format' => 'Tanggal harus berformat YYYY-MM-DD.',
+        ]);
+
+        $hasil = $this->laporan->harianKelas(
+            $this->semesterTerpilih($request),
+            $data['tanggal'] ?? now()->toDateString(),
+            isset($data['kelas_id']) ? (int) $data['kelas_id'] : null,
+        );
+
+        return $this->sajikan($hasil, $request, 'landscape');
+    }
+
     /** FR-LAP-06 — rekap presensi siswa per kelas × periode (boleh difilter mapel). */
     public function rekapSiswa(Request $request): JsonResponse|Response
     {

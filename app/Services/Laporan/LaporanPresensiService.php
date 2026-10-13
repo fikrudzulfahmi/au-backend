@@ -295,6 +295,154 @@ final class LaporanPresensiService
     }
 
     /**
+     * Rekap datang & pulang SELURUH pegawai untuk semua tanggal dalam periode —
+     * matriks gaya mesin absensi: satu baris per pegawai, satu kolom per tanggal.
+     *
+     * Berbeda dari `harian` (satu tanggal, semua orang) dan `detailPegawai`
+     * (banyak tanggal, satu orang), laporan ini memotong keduanya sekaligus.
+     *
+     * Isi sel:
+     *  - `HH:II-HH:II` bila ada presensi;
+     *  - nama izin bila ada pengajuan disetujui (mis. `Sakit`);
+     *  - `—` bila hari kerja tetapi tidak ada catatan;
+     *  - string kosong bila bukan hari kerja bagi jenis pegawai itu.
+     *
+     * @param  array{jenis_pegawai?: ?string, pegawai_id?: ?int}  $filter
+     * @return array<string, mixed>
+     */
+    public function matriksDatangPulang(Semester $semester, PeriodeLaporan $periode, array $filter = []): array
+    {
+        $pegawai = Pegawai::query()
+            ->where('is_active', true)
+            ->when(! empty($filter['jenis_pegawai']), fn ($q) => $q->where('jenis_pegawai', $filter['jenis_pegawai']))
+            ->when(! empty($filter['pegawai_id']), fn ($q) => $q->whereKey((int) $filter['pegawai_id']))
+            ->orderBy('nama')
+            ->get();
+
+        $id = $pegawai->pluck('id')->map(fn ($v): int => (int) $v)->all();
+
+        $presensi = PresensiPegawai::query()
+            ->whereIn('pegawai_id', $id)
+            ->where('semester_id', $semester->id)
+            ->whereDate('tanggal', '>=', $periode->dari)
+            ->whereDate('tanggal', '<=', $periode->sampai)
+            ->get()
+            ->groupBy(fn (PresensiPegawai $p): int => (int) $p->pegawai_id);
+
+        $izin = PengajuanIzin::query()
+            ->whereIn('pegawai_id', $id)
+            ->where('status', PengajuanIzin::STATUS_DISETUJUI)
+            ->where('tanggal_mulai', '<=', $periode->sampai)
+            ->where('tanggal_selesai', '>=', $periode->dari)
+            ->get()
+            ->groupBy(fn (PengajuanIzin $i): int => (int) $i->pegawai_id);
+
+        $aturanJam = $this->petaJamKerja();
+        $libur = $this->daftarLibur($semester);
+        $hariIni = CarbonImmutable::now()->startOfDay();
+
+        // Semua tanggal sampai hari ini — termasuk akhir pekan, agar rentangnya
+        // benar-benar "semua tanggal". Sel akhir pekan sengaja tetap ada tapi
+        // kosong, bukan ditutupi, supaya jumlah kolom seluruh baris sama.
+        $tanggal = collect($periode->tanggal())
+            ->filter(fn (CarbonImmutable $t): bool => ! $t->greaterThan($hariIni))
+            ->values();
+
+        $matriks = [];
+        $seluruh = $tanggal->map(fn (CarbonImmutable $t): array => [
+            'tanggal' => $t->toDateString(),
+            'hari' => JamKerja::DAFTAR_HARI[$t->dayOfWeekIso] ?? null,
+            'singkat' => $t->format('d/m'),
+        ])->all();
+
+        $adaPresensi = 0;
+        $hariKerjaTanpaCatatan = 0;
+
+        foreach ($pegawai as $orang) {
+            $punyaPresensi = ($presensi->get($orang->getKey()) ?? collect())
+                ->keyBy(fn (PresensiPegawai $p): string => $p->tanggal->toDateString());
+            $punyaIzin = $izin->get($orang->getKey()) ?? collect();
+
+            $sel = [];
+
+            foreach ($tanggal as $t) {
+                $kunci = $t->toDateString();
+                $p = $punyaPresensi->get($kunci);
+                $izinHari = $punyaIzin->first(fn (PengajuanIzin $i): bool => $i->mencakupTanggal($t));
+
+                if (! $this->hariKerjaPada($aturanJam, $orang->jenis_pegawai, $t, $libur)) {
+                    $sel[] = [
+                        'tanggal' => $kunci,
+                        'hari_kerja' => false,
+                        'masuk' => null,
+                        'pulang' => null,
+                        'teks' => '',
+                    ];
+
+                    continue;
+                }
+
+                if ($p !== null && $this->presensiDihitung($p)) {
+                    $masuk = $p->masuk_waktu?->format('H:i');
+                    $pulang = $p->pulang_waktu?->format('H:i');
+                    $teks = $masuk !== null ? $masuk.($pulang !== null ? '-'.$pulang : '') : '-';
+                    $adaPresensi++;
+                } elseif ($izinHari !== null) {
+                    $masuk = null;
+                    $pulang = null;
+                    $teks = $izinHari->labelJenis();
+                } else {
+                    $masuk = null;
+                    $pulang = null;
+                    $teks = '—';
+                    $hariKerjaTanpaCatatan++;
+                }
+
+                $sel[] = [
+                    'tanggal' => $kunci,
+                    'hari_kerja' => true,
+                    'masuk' => $masuk,
+                    'pulang' => $pulang,
+                    'status_masuk' => $p?->masuk_status,
+                    'status_pulang' => $p?->pulang_status,
+                    'validasi' => $p?->masuk_validasi,
+                    'terlambat' => $p?->masuk_menit_terlambat,
+                    'jarak_m' => $p?->masuk_jarak_m,
+                    'keterangan' => $p?->masuk_alasan_luar_radius
+                        ?? ($izinHari !== null ? $izinHari->labelJenis().' disetujui' : null),
+                    'teks' => $teks,
+                ];
+            }
+
+            $matriks[] = [
+                'pegawai_id' => (int) $orang->getKey(),
+                'nip' => $orang->nip,
+                'nama' => $orang->nama,
+                'jenis_pegawai' => $orang->jenis_pegawai,
+                'sel' => $sel,
+            ];
+        }
+
+        return [
+            'kode' => 'FR-LAP-14',
+            'judul' => 'Rekap Datang & Pulang Semua Pegawai',
+            'periode' => $periode->label,
+            'tanggal' => $seluruh,
+            'kolom' => ['NIP', 'Nama', 'Jenis', ...array_column($seluruh, 'singkat')],
+            'baris' => array_map(fn (array $m): array => [
+                $m['nip'], $m['nama'], $m['jenis_pegawai'], ...array_column($m['sel'], 'teks'),
+            ], $matriks),
+            'pegawai' => $matriks,
+            'ringkasan' => [
+                ['label' => 'Pegawai', 'nilai' => count($matriks)],
+                ['label' => 'Tanggal', 'nilai' => count($seluruh)],
+                ['label' => 'Sudah Presensi', 'nilai' => $adaPresensi],
+                ['label' => 'Tanpa Catatan', 'nilai' => $hariKerjaTanpaCatatan],
+            ],
+        ];
+    }
+
+    /**
      * FR-LAP-04 — rekap izin/sakit/dinas/cuti per periode.
      *
      * @param  array{pegawai_id?: ?int, jenis?: ?string}  $filter

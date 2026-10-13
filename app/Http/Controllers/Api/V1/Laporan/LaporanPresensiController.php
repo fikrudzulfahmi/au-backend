@@ -66,6 +66,37 @@ final class LaporanPresensiController extends LaporanController
         return $this->sajikan($hasil, $request, 'landscape');
     }
 
+    /**
+     * FR-LAP-14 — matriks datang & pulang seluruh pegawai untuk semua tanggal
+     * pada periode (gaya mesin absensi).
+     *
+     * Otorisasi mengikuti FR-LAP-12: pemantau melihat seluruh pegawai; guru &
+     * pegawai struktural (L(S)) hanya barisnya sendiri.
+     */
+    public function semuaOrang(Request $request): JsonResponse|Response
+    {
+        $data = $this->validasiPeriode($request, [
+            'jenis_pegawai' => ['nullable', 'in:guru,struktural'],
+            'pegawai_id' => ['nullable', 'integer', 'exists:pegawai,id'],
+        ]);
+
+        $batas = $this->batasPegawai($request);
+        if ($batas !== null) {
+            if (! empty($data['pegawai_id']) && (int) $data['pegawai_id'] !== $batas) {
+                throw new AturanBisnisException('Anda hanya dapat melihat data Anda sendiri.', 'AKSES_DITOLAK', 403);
+            }
+            $data['pegawai_id'] = $batas;
+        }
+
+        $hasil = $this->laporan->matriksDatangPulang(
+            $this->semesterTerpilih($request),
+            PeriodeLaporan::buat($data),
+            $data,
+        );
+
+        return $this->sajikan($hasil, $request, 'landscape');
+    }
+
     /** FR-LAP-03 — presensi harian seluruh pegawai untuk satu tanggal. */
     public function harian(Request $request): JsonResponse|Response
     {

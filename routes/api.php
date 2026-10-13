@@ -373,6 +373,8 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('/presensi/rekap-pegawai', [LaporanPresensiController::class, 'rekapPegawai']);
                 Route::get('/presensi/detail-pegawai', [LaporanPresensiController::class, 'detailPegawai']);
                 Route::get('/presensi/harian', [LaporanPresensiController::class, 'harian']);
+                // FR-LAP-14 — matriks semua pegawai × semua tanggal (gaya absensi).
+                Route::get('/presensi/datang-pulang', [LaporanPresensiController::class, 'semuaOrang']);
                 Route::get('/presensi/rekap-izin', [LaporanPresensiController::class, 'rekapIzin']);
                 Route::get('/presensi/rekap-luar-radius', [LaporanPresensiController::class, 'rekapLuarRadius']);
             });
@@ -383,6 +385,14 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('/jurnal/daftar', [LaporanJurnalController::class, 'daftar']);
                 Route::get('/jurnal/kepatuhan', [LaporanJurnalController::class, 'kepatuhan']);
                 Route::get('/jurnal/jam-mengajar', [LaporanJurnalController::class, 'jamMengajar']);
+            });
+
+            // Dasbor harian pengisian jurnal — memotong seluruh kelas sekolah
+            // untuk satu tanggal, karena itu hanya untuk pemantau. Guru sengaja
+            // TIDAK dimasukkan: laporan ini memperlihatkan jurnal guru lain,
+            // di luar pembatasan `L(S)` FR-LAP-12.
+            Route::middleware('peran:admin,kepala_sekolah,wakasek_kurikulum')->group(function (): void {
+                Route::get('/jurnal/harian', [LaporanJurnalController::class, 'harian']);
             });
 
             // KP-5.5 — rekap presensi siswa kelas wali: hanya guru, dan hanya
