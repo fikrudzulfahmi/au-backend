@@ -425,10 +425,10 @@ class JurnalService
 
             $status = (string) ($isi['status'] ?? PresensiSiswa::HADIR);
 
-            // BR-23 — status hanya H/S/I/A.
+            // BR-23 — status hanya H/S/I/A/B.
             if (! in_array($status, PresensiSiswa::STATUS, true)) {
                 throw AturanBisnisException::tolak(
-                    'Status presensi siswa hanya boleh H, S, I, atau A.',
+                    'Status presensi siswa hanya boleh H, S, I, A, atau B.',
                     'presensi',
                     'STATUS_TIDAK_SAH',
                 );
@@ -501,6 +501,7 @@ class JurnalService
                 'presensiSiswa as jumlah_sakit' => fn ($q) => $q->where('status', PresensiSiswa::SAKIT),
                 'presensiSiswa as jumlah_izin' => fn ($q) => $q->where('status', PresensiSiswa::IZIN),
                 'presensiSiswa as jumlah_alpa' => fn ($q) => $q->where('status', PresensiSiswa::ALPA),
+                'presensiSiswa as jumlah_bolos' => fn ($q) => $q->where('status', PresensiSiswa::BOLOS),
             ])
             ->untukPegawai((int) $guru->id)
             ->rentangTanggal($filter['dari'] ?? null, $filter['sampai'] ?? null)
@@ -553,6 +554,7 @@ class JurnalService
             PresensiSiswa::SAKIT => 0,
             PresensiSiswa::IZIN => 0,
             PresensiSiswa::ALPA => 0,
+            PresensiSiswa::BOLOS => 0,
         ];
 
         $baris = [];
@@ -566,6 +568,7 @@ class JurnalService
                 PresensiSiswa::SAKIT => $milik->where('status', PresensiSiswa::SAKIT)->count(),
                 PresensiSiswa::IZIN => $milik->where('status', PresensiSiswa::IZIN)->count(),
                 PresensiSiswa::ALPA => $milik->where('status', PresensiSiswa::ALPA)->count(),
+                PresensiSiswa::BOLOS => $milik->where('status', PresensiSiswa::BOLOS)->count(),
             ];
 
             foreach ($jumlah as $kunci => $nilai) {
@@ -582,6 +585,7 @@ class JurnalService
                 'sakit' => $jumlah[PresensiSiswa::SAKIT],
                 'izin' => $jumlah[PresensiSiswa::IZIN],
                 'alpa' => $jumlah[PresensiSiswa::ALPA],
+                'bolos' => $jumlah[PresensiSiswa::BOLOS],
                 'total' => $total,
                 'persen_hadir' => $total > 0 ? round(100 * $jumlah[PresensiSiswa::HADIR] / $total, 1) : null,
             ];

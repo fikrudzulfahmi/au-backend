@@ -54,10 +54,10 @@ final class LaporanJurnalService
             'kode' => 'FR-LAP-06',
             'judul' => 'Rekap Presensi Siswa'.($namaKelas ? ' — '.$namaKelas : ''),
             'periode' => $periode->label,
-            'kolom' => ['NIS', 'Nama', 'Hadir (H)', 'Sakit (S)', 'Izin (I)', 'Alpa (A)', 'Total', 'Hadir (%)'],
+            'kolom' => ['NIS', 'Nama', 'Hadir (H)', 'Sakit (S)', 'Izin (I)', 'Alpa (A)', 'Bolos (B)', 'Total', 'Hadir (%)'],
             'baris' => array_map(fn (array $b): array => [
                 $b['nis'], $b['nama'], $b['hadir'], $b['sakit'], $b['izin'],
-                $b['alpa'], $b['total'], $b['persen_hadir'],
+                $b['alpa'], $b['bolos'], $b['total'], $b['persen_hadir'],
             ], $siswa),
             'siswa' => $siswa,
             'kelas_id' => $kelasId,
@@ -70,6 +70,7 @@ final class LaporanJurnalService
                 ['label' => 'S', 'nilai' => $hasil['ringkasan'][PresensiSiswa::SAKIT]],
                 ['label' => 'I', 'nilai' => $hasil['ringkasan'][PresensiSiswa::IZIN]],
                 ['label' => 'A', 'nilai' => $hasil['ringkasan'][PresensiSiswa::ALPA]],
+                ['label' => 'B', 'nilai' => $hasil['ringkasan'][PresensiSiswa::BOLOS]],
             ],
         ];
     }
@@ -89,6 +90,7 @@ final class LaporanJurnalService
                 'presensiSiswa as jumlah_sakit' => fn ($q) => $q->where('status', PresensiSiswa::SAKIT),
                 'presensiSiswa as jumlah_izin' => fn ($q) => $q->where('status', PresensiSiswa::IZIN),
                 'presensiSiswa as jumlah_alpa' => fn ($q) => $q->where('status', PresensiSiswa::ALPA),
+                'presensiSiswa as jumlah_bolos' => fn ($q) => $q->where('status', PresensiSiswa::BOLOS),
             ])
             ->where('semester_id', $semester->id)
             ->rentangTanggal($periode->dari->toDateString(), $periode->sampai->toDateString())
@@ -115,16 +117,17 @@ final class LaporanJurnalService
             'sakit' => (int) $j->jumlah_sakit,
             'izin' => (int) $j->jumlah_izin,
             'alpa' => (int) $j->jumlah_alpa,
+            'bolos' => (int) $j->jumlah_bolos,
         ])->all();
 
         return [
             'kode' => 'FR-LAP-07',
             'judul' => 'Daftar Jurnal Pembelajaran',
             'periode' => $periode->label,
-            'kolom' => ['Tanggal', 'Jam Ke', 'Kelas', 'Mapel', 'Guru', 'Materi', 'Kegiatan', 'H', 'S', 'I', 'A'],
+            'kolom' => ['Tanggal', 'Jam Ke', 'Kelas', 'Mapel', 'Guru', 'Materi', 'Kegiatan', 'H', 'S', 'I', 'A', 'B'],
             'baris' => array_map(fn (array $b): array => [
                 $b['tanggal'], $b['label_jam'], $b['kelas'], $b['mapel'], $b['guru'],
-                $b['materi'], $b['kegiatan'], $b['hadir'], $b['sakit'], $b['izin'], $b['alpa'],
+                $b['materi'], $b['kegiatan'], $b['hadir'], $b['sakit'], $b['izin'], $b['alpa'], $b['bolos'],
             ], $baris),
             'jurnal' => $baris,
             'ringkasan' => [
@@ -133,6 +136,7 @@ final class LaporanJurnalService
                 ['label' => 'S', 'nilai' => array_sum(array_column($baris, 'sakit'))],
                 ['label' => 'I', 'nilai' => array_sum(array_column($baris, 'izin'))],
                 ['label' => 'A', 'nilai' => array_sum(array_column($baris, 'alpa'))],
+                ['label' => 'B', 'nilai' => array_sum(array_column($baris, 'bolos'))],
             ],
         ];
     }

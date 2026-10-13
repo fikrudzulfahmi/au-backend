@@ -21,7 +21,7 @@ class PresensiSiswa extends Model
     /** @use HasFactory<PresensiSiswaFactory> */
     use HasFactory;
 
-    /** BR-23 — status presensi siswa hanya empat nilai ini. */
+    /** BR-23 — status presensi siswa. */
     public const HADIR = 'H';
 
     public const SAKIT = 'S';
@@ -30,8 +30,11 @@ class PresensiSiswa extends Model
 
     public const ALPA = 'A';
 
+    /** Tanpa kabar dan tidak berizin — dibedakan dari Alpa atas permintaan sekolah. */
+    public const BOLOS = 'B';
+
     /** @var list<string> */
-    public const STATUS = [self::HADIR, self::SAKIT, self::IZIN, self::ALPA];
+    public const STATUS = [self::HADIR, self::SAKIT, self::IZIN, self::ALPA, self::BOLOS];
 
     /** @var array<string, string> */
     public const DAFTAR_STATUS = [
@@ -39,10 +42,11 @@ class PresensiSiswa extends Model
         self::SAKIT => 'Sakit',
         self::IZIN => 'Izin',
         self::ALPA => 'Alpa',
+        self::BOLOS => 'Bolos',
     ];
 
     /** Status selain hadir wajib dipilih guru secara sadar (FR-JRN-03). */
-    public const TIDAK_HADIR = [self::SAKIT, self::IZIN, self::ALPA];
+    public const TIDAK_HADIR = [self::SAKIT, self::IZIN, self::ALPA, self::BOLOS];
 
     protected $table = 'presensi_siswa';
 

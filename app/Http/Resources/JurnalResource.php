@@ -47,6 +47,7 @@ class JurnalResource extends JsonResource
                 'S' => (int) ($this->jumlah_sakit ?? 0),
                 'I' => (int) ($this->jumlah_izin ?? 0),
                 'A' => (int) ($this->jumlah_alpa ?? 0),
+                'B' => (int) ($this->jumlah_bolos ?? 0),
             ],
             'diubah_pada' => $this->updated_at?->toIso8601String(),
         ];

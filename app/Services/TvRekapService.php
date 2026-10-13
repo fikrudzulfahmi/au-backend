@@ -209,13 +209,15 @@ class TvRekapService
         $s = (int) ($jumlah->get(PresensiSiswa::SAKIT) ?? 0);
         $i = (int) ($jumlah->get(PresensiSiswa::IZIN) ?? 0);
         $a = (int) ($jumlah->get(PresensiSiswa::ALPA) ?? 0);
-        $total = $h + $s + $i + $a;
+        $b = (int) ($jumlah->get(PresensiSiswa::BOLOS) ?? 0);
+        $total = $h + $s + $i + $a + $b;
 
         return [
             'hadir' => $h,
             'sakit' => $s,
             'izin' => $i,
             'alpa' => $a,
+            'bolos' => $b,
             'total' => $total,
             'persen_hadir' => $total > 0 ? round(100 * $h / $total, 1) : null,
         ];

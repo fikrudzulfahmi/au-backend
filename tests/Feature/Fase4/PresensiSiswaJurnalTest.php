@@ -112,7 +112,7 @@ it('menolak siswa yang bukan anggota kelas itu', function () {
     expect(Jurnal::count())->toBe(0);
 });
 
-it('menolak status di luar H, S, I, A', function () {
+it('menolak status di luar H, S, I, A, B', function () {
     $r = siapkanJurnal();
 
     $this->actingAs($r['user'])
@@ -123,6 +123,47 @@ it('menolak status di luar H, S, I, A', function () {
         ->assertJsonValidationErrors(['presensi.'.$r['siswa'][0]->id.'.status']);
 
     expect(Jurnal::count())->toBe(0);
+});
+
+it('menyimpan status B (bolos) beserta keterangannya', function () {
+    $r = siapkanJurnal();
+    $s = $r['siswa'];
+
+    $this->actingAs($r['user'])
+        ->postJson('/api/v1/jurnal', badanJurnal($r, [], [
+            'presensi' => [
+                (string) $s[0]->id => ['status' => PresensiSiswa::HADIR],
+                (string) $s[3]->id => ['status' => PresensiSiswa::BOLOS, 'keterangan' => 'Tidak ada kabar'],
+            ],
+        ]))
+        ->assertCreated();
+
+    $jelas = Jurnal::first()->presensiSiswa->keyBy('siswa_id');
+    expect($jelas[$s[3]->id]->status)->toBe(PresensiSiswa::BOLOS)
+        ->and($jelas[$s[3]->id]->keterangan)->toBe('Tidak ada kabar');
+});
+
+it('memisahkan hitungan B dari A pada ringkasan riwayat', function () {
+    $r = siapkanJurnal();
+    $s = $r['siswa'];
+
+    $this->actingAs($r['user'])
+        ->postJson('/api/v1/jurnal', badanJurnal($r, [], [
+            'presensi' => [
+                (string) $s[0]->id => ['status' => PresensiSiswa::HADIR],
+                (string) $s[1]->id => ['status' => PresensiSiswa::ALPA],
+                (string) $s[2]->id => ['status' => PresensiSiswa::BOLOS],
+                (string) $s[3]->id => ['status' => PresensiSiswa::BOLOS],
+            ],
+        ]))
+        ->assertCreated();
+
+    $this->actingAs($r['user'])
+        ->getJson('/api/v1/jurnal')
+        ->assertOk()
+        ->assertJsonPath('data.0.ringkasan.H', 1)
+        ->assertJsonPath('data.0.ringkasan.A', 1)
+        ->assertJsonPath('data.0.ringkasan.B', 2);
 });
 
 it('mengganti presensi siswa secara utuh saat jurnal diubah', function () {
