@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Laporan;
 
-use App\Models\JamKerja;
 use App\Models\Jadwal;
+use App\Models\JamKerja;
 use App\Models\Jurnal;
 use App\Models\Pegawai;
 use App\Models\PengajuanIzin;
