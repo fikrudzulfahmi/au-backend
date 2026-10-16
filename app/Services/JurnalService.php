@@ -679,6 +679,7 @@ class JurnalService
                 'presensiSiswa as jumlah_izin' => fn ($q) => $q->where('status', PresensiSiswa::IZIN),
                 'presensiSiswa as jumlah_alpa' => fn ($q) => $q->where('status', PresensiSiswa::ALPA),
                 'presensiSiswa as jumlah_bolos' => fn ($q) => $q->where('status', PresensiSiswa::BOLOS),
+                'presensiSiswa as jumlah_terlambat' => fn ($q) => $q->where('status', PresensiSiswa::TERLAMBAT),
             ])
             ->untukPegawai((int) $guru->id)
             ->rentangTanggal($filter['dari'] ?? null, $filter['sampai'] ?? null)
@@ -694,7 +695,11 @@ class JurnalService
 
     /**
      * FR-JRN-10 — rekap presensi siswa satu kelas pada rentang periode:
-     * per siswa jumlah H/S/I/A dan persentasenya.
+     * per siswa jumlah H/S/I/A/B/T dan persentase kehadirannya.
+     *
+     * Persentase kehadiran memakai H + T: siswa yang terlambat tetap masuk kelas,
+     * jadi tidak boleh dihitung sebagai tidak hadir. Kolom T tetap ditampilkan
+     * agar kebiasaan terlambatnya terbaca.
      *
      * @return array{ringkasan: array<string, int>, siswa: list<array<string, mixed>>, sesi: int}
      */
@@ -732,6 +737,7 @@ class JurnalService
             PresensiSiswa::IZIN => 0,
             PresensiSiswa::ALPA => 0,
             PresensiSiswa::BOLOS => 0,
+            PresensiSiswa::TERLAMBAT => 0,
         ];
 
         $baris = [];
@@ -746,6 +752,7 @@ class JurnalService
                 PresensiSiswa::IZIN => $milik->where('status', PresensiSiswa::IZIN)->count(),
                 PresensiSiswa::ALPA => $milik->where('status', PresensiSiswa::ALPA)->count(),
                 PresensiSiswa::BOLOS => $milik->where('status', PresensiSiswa::BOLOS)->count(),
+                PresensiSiswa::TERLAMBAT => $milik->where('status', PresensiSiswa::TERLAMBAT)->count(),
             ];
 
             foreach ($jumlah as $kunci => $nilai) {
@@ -753,6 +760,7 @@ class JurnalService
             }
 
             $total = array_sum($jumlah);
+            $kehadiran = $jumlah[PresensiSiswa::HADIR] + $jumlah[PresensiSiswa::TERLAMBAT];
 
             $baris[] = [
                 'siswa_id' => $siswaId,
@@ -763,8 +771,9 @@ class JurnalService
                 'izin' => $jumlah[PresensiSiswa::IZIN],
                 'alpa' => $jumlah[PresensiSiswa::ALPA],
                 'bolos' => $jumlah[PresensiSiswa::BOLOS],
+                'terlambat' => $jumlah[PresensiSiswa::TERLAMBAT],
                 'total' => $total,
-                'persen_hadir' => $total > 0 ? round(100 * $jumlah[PresensiSiswa::HADIR] / $total, 1) : null,
+                'persen_kehadiran' => $total > 0 ? round(100 * $kehadiran / $total, 1) : null,
             ];
         }
 

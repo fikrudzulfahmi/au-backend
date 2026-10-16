@@ -12,7 +12,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /**
  * 7.5 — satu jurnal pada daftar/riwayat (FR-JRN-09).
  *
- * Ringkasan H/S/I/A memakai count yang sudah disiapkan pemanggil (withCount) agar
+ * Ringkasan H/S/I/A/B/T memakai count yang sudah disiapkan pemanggil (withCount) agar
  * daftar tidak memicu query per baris.
  *
  * @mixin Jurnal
@@ -48,6 +48,7 @@ class JurnalResource extends JsonResource
                 'I' => (int) ($this->jumlah_izin ?? 0),
                 'A' => (int) ($this->jumlah_alpa ?? 0),
                 'B' => (int) ($this->jumlah_bolos ?? 0),
+                'T' => (int) ($this->jumlah_terlambat ?? 0),
             ],
             'diubah_pada' => $this->updated_at?->toIso8601String(),
             // Pengganti (guru piket) yang mengisi sesi ini; null = pengampu sendiri.

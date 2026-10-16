@@ -195,7 +195,11 @@ class TvRekapService
         ];
     }
 
-    /** FR-TV-07 — ringkasan presensi siswa hari ini (agregat, tanpa nama siswa). */
+    /**
+     * FR-TV-07 — ringkasan presensi siswa hari ini (agregat, tanpa nama siswa).
+     *
+     * `persen_kehadiran` memakai H + T: siswa terlambat tetap masuk kelas.
+     */
     private function presensiSiswa(CarbonImmutable $saat): array
     {
         $jumlah = PresensiSiswa::query()
@@ -210,7 +214,8 @@ class TvRekapService
         $i = (int) ($jumlah->get(PresensiSiswa::IZIN) ?? 0);
         $a = (int) ($jumlah->get(PresensiSiswa::ALPA) ?? 0);
         $b = (int) ($jumlah->get(PresensiSiswa::BOLOS) ?? 0);
-        $total = $h + $s + $i + $a + $b;
+        $t = (int) ($jumlah->get(PresensiSiswa::TERLAMBAT) ?? 0);
+        $total = $h + $s + $i + $a + $b + $t;
 
         return [
             'hadir' => $h,
@@ -218,8 +223,9 @@ class TvRekapService
             'izin' => $i,
             'alpa' => $a,
             'bolos' => $b,
+            'terlambat' => $t,
             'total' => $total,
-            'persen_hadir' => $total > 0 ? round(100 * $h / $total, 1) : null,
+            'persen_kehadiran' => $total > 0 ? round(100 * ($h + $t) / $total, 1) : null,
         ];
     }
 

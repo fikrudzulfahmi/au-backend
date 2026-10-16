@@ -112,7 +112,7 @@ it('menolak siswa yang bukan anggota kelas itu', function () {
     expect(Jurnal::count())->toBe(0);
 });
 
-it('menolak status di luar H, S, I, A, B', function () {
+it('menolak status di luar H, S, I, A, B, T', function () {
     $r = siapkanJurnal();
 
     $this->actingAs($r['user'])
@@ -141,6 +141,59 @@ it('menyimpan status B (bolos) beserta keterangannya', function () {
     $jelas = Jurnal::first()->presensiSiswa->keyBy('siswa_id');
     expect($jelas[$s[3]->id]->status)->toBe(PresensiSiswa::BOLOS)
         ->and($jelas[$s[3]->id]->keterangan)->toBe('Tidak ada kabar');
+});
+
+it('menyimpan status T (terlambat) beserta keterangannya', function () {
+    $r = siapkanJurnal();
+    $s = $r['siswa'];
+
+    $id = $this->actingAs($r['user'])
+        ->postJson('/api/v1/jurnal', badanJurnal($r, [], [
+            'presensi' => [
+                (string) $s[0]->id => ['status' => PresensiSiswa::HADIR],
+                (string) $s[1]->id => [
+                    'status' => PresensiSiswa::TERLAMBAT,
+                    'keterangan' => 'Datang setelah bel',
+                ],
+            ],
+        ]))
+        ->assertCreated()
+        ->json('data.id');
+
+    $jelas = Jurnal::find($id)->presensiSiswa->keyBy('siswa_id');
+
+    expect($jelas[$s[1]->id]->status)->toBe(PresensiSiswa::TERLAMBAT)
+        ->and($jelas[$s[1]->id]->keterangan)->toBe('Datang setelah bel')
+        ->and($jelas[$s[1]->id]->labelStatus())->toBe('Terlambat');
+
+    // Guru melihat labelnya di halaman isi jurnal, bukan hanya huruf T.
+    $this->actingAs($r['user'])
+        ->getJson('/api/v1/jurnal/'.$id.'/presensi-siswa')
+        ->assertOk()
+        ->assertJsonFragment(['status' => PresensiSiswa::TERLAMBAT, 'label_status' => 'Terlambat']);
+});
+
+it('memisahkan hitungan T dari H pada ringkasan riwayat', function () {
+    $r = siapkanJurnal();
+    $s = $r['siswa'];
+
+    $this->actingAs($r['user'])
+        ->postJson('/api/v1/jurnal', badanJurnal($r, [], [
+            'presensi' => [
+                (string) $s[0]->id => ['status' => PresensiSiswa::HADIR],
+                (string) $s[1]->id => ['status' => PresensiSiswa::TERLAMBAT],
+                (string) $s[2]->id => ['status' => PresensiSiswa::TERLAMBAT],
+                (string) $s[3]->id => ['status' => PresensiSiswa::ALPA],
+            ],
+        ]))
+        ->assertCreated();
+
+    $this->actingAs($r['user'])
+        ->getJson('/api/v1/jurnal')
+        ->assertOk()
+        ->assertJsonPath('data.0.ringkasan.H', 1)
+        ->assertJsonPath('data.0.ringkasan.T', 2)
+        ->assertJsonPath('data.0.ringkasan.A', 1);
 });
 
 it('memisahkan hitungan B dari A pada ringkasan riwayat', function () {
@@ -342,7 +395,42 @@ it('mengizinkan wali kelas melihat rekap presensi kelasnya', function () {
 
     // Persentase kehadiran dihitung dari sesi yang benar-benar ada: yang alpa 0%.
     // Nilainya melalui JSON, sehingga 0.0 terserialisasi menjadi 0 — bandingkan longgar.
-    expect(collect($balasan['siswa'])->pluck('persen_hadir')->filter(fn ($v) => $v !== null)->min())->toEqual(0.0);
+    expect(collect($balasan['siswa'])->pluck('persen_kehadiran')->filter(fn ($v) => $v !== null)->min())->toEqual(0.0);
+});
+
+it('menghitung terlambat sebagai kehadiran pada rekap kelas', function () {
+    $r = siapkanJurnal();
+    $s = $r['siswa'];
+
+    $r['kelas']->update(['wali_kelas_id' => $r['guru']->id]);
+
+    $this->actingAs($r['user'])
+        ->postJson('/api/v1/jurnal', badanJurnal($r, [], [
+            'presensi' => [
+                (string) $s[0]->id => ['status' => PresensiSiswa::HADIR],
+                (string) $s[1]->id => ['status' => PresensiSiswa::TERLAMBAT],
+                (string) $s[2]->id => ['status' => PresensiSiswa::ALPA],
+                (string) $s[3]->id => ['status' => PresensiSiswa::IZIN],
+            ],
+        ]))
+        ->assertCreated();
+
+    $balasan = $this->actingAs($r['user'])
+        ->getJson('/api/v1/jurnal/rekap-siswa?kelas_id='.$r['kelas']->id)
+        ->assertOk()
+        ->json('data');
+
+    $baris = collect($balasan['siswa'])->keyBy('siswa_id');
+
+    // Terlambat dicatat pada kolomnya sendiri…
+    expect($balasan['ringkasan']['T'])->toBe(1)
+        ->and($baris[$s[1]->id]['terlambat'])->toBe(1)
+        ->and($baris[$s[1]->id]['hadir'])->toBe(0);
+
+    // …tetapi tidak menghanguskan persentase kehadirannya.
+    expect($baris[$s[1]->id]['persen_kehadiran'])->toEqual(100.0)
+        ->and($baris[$s[2]->id]['persen_kehadiran'])->toEqual(0.0)
+        ->and($baris[$s[3]->id]['persen_kehadiran'])->toEqual(0.0);
 });
 
 it('menolak guru yang bukan wali kelas itu melihat rekap', function () {

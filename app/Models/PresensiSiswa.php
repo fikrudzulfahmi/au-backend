@@ -33,8 +33,16 @@ class PresensiSiswa extends Model
     /** Tanpa kabar dan tidak berizin — dibedakan dari Alpa atas permintaan sekolah. */
     public const BOLOS = 'B';
 
+    /**
+     * Hadir, tetapi datang setelah pelajaran dimulai.
+     *
+     * Terlambat tetap masuk hitungan kehadiran (`KEHADIRAN`), hanya dicatat
+     * tersendiri supaya kebiasaan siswanya terlihat oleh guru dan wali kelas.
+     */
+    public const TERLAMBAT = 'T';
+
     /** @var list<string> */
-    public const STATUS = [self::HADIR, self::SAKIT, self::IZIN, self::ALPA, self::BOLOS];
+    public const STATUS = [self::HADIR, self::SAKIT, self::IZIN, self::ALPA, self::BOLOS, self::TERLAMBAT];
 
     /** @var array<string, string> */
     public const DAFTAR_STATUS = [
@@ -43,9 +51,26 @@ class PresensiSiswa extends Model
         self::IZIN => 'Izin',
         self::ALPA => 'Alpa',
         self::BOLOS => 'Bolos',
+        self::TERLAMBAT => 'Terlambat',
     ];
 
-    /** Status selain hadir wajib dipilih guru secara sadar (FR-JRN-03). */
+    /**
+     * Status yang dihitung sebagai kehadiran saat menghitung persentase.
+     *
+     * Siswa yang terlambat tetap masuk kelas, jadi tidak boleh menghanguskan
+     * persentase kehadirannya — hanya dicatat pada kolom tersendiri.
+     *
+     * @var list<string>
+     */
+    public const KEHADIRAN = [self::HADIR, self::TERLAMBAT];
+
+    /**
+     * Status yang berarti siswa tidak mengikuti pelajaran tanpa alasan sah.
+     *
+     * Terlambat TIDAK termasuk di sini: ia hadir, hanya tidak tepat waktu.
+     *
+     * @var list<string>
+     */
     public const TIDAK_HADIR = [self::SAKIT, self::IZIN, self::ALPA, self::BOLOS];
 
     protected $table = 'presensi_siswa';

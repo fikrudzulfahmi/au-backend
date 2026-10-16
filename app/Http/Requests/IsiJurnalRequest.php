@@ -54,7 +54,7 @@ class IsiJurnalRequest extends FormRequest
             'presensi' => ['nullable', 'array'],
             'presensi.*' => ['array'],
             'presensi.*.siswa_id' => ['nullable', 'integer', 'exists:siswa,id'],
-            // BR-23 — status hanya H/S/I/A.
+            // BR-23 — status hanya H/S/I/A/B/T.
             'presensi.*.status' => ['required_with:presensi', 'string', Rule::in(PresensiSiswa::STATUS)],
             'presensi.*.keterangan' => ['nullable', 'string', 'max:255'],
         ]);
