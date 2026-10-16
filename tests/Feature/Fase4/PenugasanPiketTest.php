@@ -11,6 +11,7 @@ use App\Models\PresensiPegawai;
 use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\JurnalService;
+use Database\Seeders\PenugasanPiketSeeder;
 
 /*
 |--------------------------------------------------------------------------
@@ -364,4 +365,30 @@ it('menandai sesi sudah terisi bagi guru piket setelah diisi guru lain', functio
         ->assertOk()
         ->assertJsonPath('data.sesi.0.status', JurnalService::SUDAH)
         ->assertJsonPath('data.sesi.0.boleh_isi', false);
+});
+
+/* ------------------------------ Data contoh ------------------------------ */
+
+it('mengisi contoh penugasan piket untuk hari kerja dan aman diulang', function (): void {
+    $tahun = tahunAktif();
+    $semester = semesterAktif($tahun);
+
+    $guru = collect(range(1, 3))->map(fn (): User => buatPegawaiDenganAkun(Pegawai::JENIS_GURU));
+
+    expect($guru)->toHaveCount(3);
+
+    (new PenugasanPiketSeeder)->run();
+
+    $pertama = PenugasanPiket::orderBy('hari')->get();
+
+    expect($pertama)->toHaveCount(5)
+        ->and($pertama->pluck('hari')->all())->toBe([1, 2, 3, 4, 5])
+        ->and($pertama->every(fn (PenugasanPiket $p): bool => (int) $p->semester_id === (int) $semester->id))->toBeTrue()
+        ->and($pertama->every(fn (PenugasanPiket $p): bool => $p->is_active))->toBeTrue();
+
+    // Dijalankan ulang tidak menambah baris (dipakai `migrate:fresh --seed`).
+    (new PenugasanPiketSeeder)->run();
+
+    expect(PenugasanPiket::count())->toBe($pertama->count())
+        ->and($pertama->first()->fresh()->pegawai_id)->toBe($pertama->first()->pegawai_id);
 });

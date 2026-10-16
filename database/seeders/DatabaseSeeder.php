@@ -52,6 +52,11 @@ class DatabaseSeeder extends Seeder
             // acuan terlambat/pulang cepat/hari kerja.
             LokasiPresensiSeeder::class,
             JamKerjaSeeder::class,
+
+            // ---- Fase 4: penugasan guru piket (BR-26) ----
+            // Butuh pegawai berperan guru serta semester aktif, sehingga diletakkan
+            // setelah keduanya ada.
+            PenugasanPiketSeeder::class,
         ]);
     }
 }
