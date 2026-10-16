@@ -41,6 +41,8 @@ class Jurnal extends Model
         'catatan',
         'dibuat_oleh',
         'diubah_oleh',
+        // Pengganti yang mengisi sesi ini (guru piket). NULL = diisi pengampu sendiri.
+        'diisi_oleh_pegawai_id',
     ];
 
     protected function casts(): array
@@ -55,6 +57,7 @@ class Jurnal extends Model
             'jam_ke_selesai' => 'integer',
             'dibuat_oleh' => 'integer',
             'diubah_oleh' => 'integer',
+            'diisi_oleh_pegawai_id' => 'integer',
         ];
     }
 
@@ -71,6 +74,15 @@ class Jurnal extends Model
     public function pegawai(): BelongsTo
     {
         return $this->belongsTo(Pegawai::class, 'pegawai_id');
+    }
+
+    /**
+     * Pengganti yang mengisi jurnal ini (guru piket hari itu), bila bukan pengampu.
+     * NULL berarti diisi pengampu sendiri.
+     */
+    public function diisiOleh(): BelongsTo
+    {
+        return $this->belongsTo(Pegawai::class, 'diisi_oleh_pegawai_id');
     }
 
     public function kelas(): BelongsTo

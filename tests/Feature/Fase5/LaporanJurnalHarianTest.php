@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\Jurnal;
+use App\Models\Kelas;
 use App\Models\Pegawai;
 use Carbon\CarbonImmutable;
 use Illuminate\Testing\TestResponse;
@@ -121,6 +122,78 @@ it('menandai sesi berhalangan pada hari izin disetujui dan mengeluarkannya dari 
     expect($res->json('data.hitung.persen_terisi'))->toBeNull();
 });
 
+/*
+ * Jurnal yang sudah ada menang atas status izin. Inilah alur guru piket:
+ * pengampu izin, sesinya tetap terisi oleh pengganti — dan dasbor TIDAK boleh
+ * melaporkan kelas itu sebagai "Berhalangan", karena justru terbaca seolah
+ * belum diisi (FR-IZN-07/BR-26 hanya mengatur sesi yang belum terisi).
+ */
+it('tetap menandai sesi sudah diisi walau pengampunya izin', function () {
+    $r = rangkaianHarian();
+    setujuiIzin($r['guru'], '2026-10-05', null, 'sakit');
+    Jurnal::factory()->denganPlotting($r['plotting'])->padaTanggal('2026-10-05')->jamKe(1, 3)->create();
+
+    $res = $this->actingAs(sebagaiAdmin())->getJson('/api/v1/laporan/jurnal/harian');
+    $res->assertOk();
+
+    $sesi = sesiHarianPertama($res);
+    expect($sesi['status'])->toBe('sudah')
+        ->and($sesi['jurnal_id'])->not->toBeNull()
+        ->and($res->json('data.hitung.sudah'))->toBe(1)
+        ->and($res->json('data.hitung.berhalangan'))->toBe(0)
+        ->and($res->json('data.hitung.belum'))->toBe(0)
+        // Sesi yang terisi ikut jadi penyebut → 1/1, bukan null.
+        ->and($res->json('data.hitung.persen_terisi'))->toEqual(100);
+});
+
+/*
+ * Kolom `tanggal_mulai` bertipe date tetapi tersimpan bergaya datetime
+ * ("2026-10-05 00:00:00"). Dibandingkan sebagai string, izin yang rentangnya
+ * MULAI tepat pada tanggal laporan tidak pernah cocok — izin sehari penuh
+ * karena itu hilang dari dasbor. Perbandingannya harus per tanggal.
+ */
+it('mengenali izin yang rentangnya mulai tepat pada tanggal laporan', function () {
+    $r = rangkaianHarian();
+    setujuiIzin($r['guru'], '2026-10-05', '2026-10-05', 'izin');
+
+    $res = $this->actingAs(sebagaiAdmin())->getJson('/api/v1/laporan/jurnal/harian');
+    $res->assertOk();
+
+    expect(sesiHarianPertama($res)['status'])->toBe('berhalangan')
+        ->and($res->json('data.hitung.berhalangan'))->toBe(1)
+        ->and($res->json('data.hitung.belum'))->toBe(0);
+});
+
+/*
+ * "Kelas mana yang belum diisi" hanya bisa dipercaya bila daftarnya lengkap:
+ * kelas yang tidak punya sesi pada tanggal itu tetap ditampilkan, ditandai
+ * tanpa_jadwal, dan tidak dihitung sebagai jurnal yang bolong.
+ */
+it('menampilkan seluruh kelas walau kelas itu tidak punya sesi pada tanggal laporan', function () {
+    $r = rangkaianHarian();
+    $lain = Kelas::factory()->create([
+        'nama' => 'XII AKL 9',
+        'tahun_pelajaran_id' => $r['tahun']->id,
+    ]);
+
+    $res = $this->actingAs(sebagaiAdmin())->getJson('/api/v1/laporan/jurnal/harian');
+    $res->assertOk();
+
+    $kelas = collect($res->json('data.kelas'))->keyBy('kelas_id');
+    expect($kelas)->toHaveCount(2)
+        ->and($kelas[$lain->id]['sesi'])->toBe(0)
+        ->and($kelas[$lain->id]['tanpa_jadwal'])->toBeTrue()
+        ->and($kelas[$lain->id]['belum'])->toBe(0)
+        ->and($kelas[$lain->id]['persen_terisi'])->toBeNull()
+        ->and($res->json('data.hitung.kelas'))->toBe(2)
+        ->and($res->json('data.hitung.sesi'))->toBe(1);
+
+    // Kelas tanpa sesi tampil sebagai barisnya sendiri, bukan hilang.
+    $adaBaris = collect($res->json('data.baris'))
+        ->contains(fn (array $b): bool => $b[0] === 'XII AKL 9' && $b[4] === 'Tidak ada jadwal');
+    expect($adaBaris)->toBeTrue();
+});
+
 it('menandai sesi belum presensi masuk sebagai alasan belum terisi', function () {
     rangkaianHarian(denganPresensi: false);
 
@@ -151,8 +224,8 @@ it('dibuka pemantau (admin) dan ditutup bagi guru', function () {
     $this->actingAs($r['user'])->getJson('/api/v1/laporan/jurnal/harian')->assertForbidden();
 });
 
-it('mengosongkan dasbor ketika tanggal pilihan tidak memiliki jadwal', function () {
-    rangkaianHarian();
+it('tetap menampilkan seluruh kelas pada tanggal tanpa jadwal, bertanda tanpa_jadwal', function () {
+    $r = rangkaianHarian();
 
     // Selasa — jadwal uji hanya dipasang pada hari Senin.
     $res = $this->actingAs(sebagaiAdmin())->getJson('/api/v1/laporan/jurnal/harian?tanggal=2026-10-06');
@@ -160,9 +233,17 @@ it('mengosongkan dasbor ketika tanggal pilihan tidak memiliki jadwal', function 
         ->assertJsonPath('data.tanggal', '2026-10-06')
         ->assertJsonPath('data.hari', 'Selasa');
 
-    expect($res->json('data.kelas'))->toBe([])
-        ->and($res->json('data.baris'))->toBe([])
-        ->and($res->json('data.hitung.sesi'))->toBe(0);
+    // Dasbor sengaja TIDAK kosong lagi: kelas tetap tampil agar "semua kelas"
+    // benar-benar semua, tetapi tidak satu pun dihitung sebagai jurnal yang
+    // belum terisi karena tidak ada sesi terjadwal pada hari itu.
+    expect($res->json('data.kelas'))->toHaveCount(1)
+        ->and($res->json('data.kelas.0.nama'))->toBe((string) $r['kelas']->nama)
+        ->and($res->json('data.kelas.0.tanpa_jadwal'))->toBeTrue()
+        ->and($res->json('data.kelas.0.belum'))->toBe(0)
+        ->and($res->json('data.hitung.sesi'))->toBe(0)
+        ->and($res->json('data.hitung.belum'))->toBe(0)
+        ->and($res->json('data.baris'))->toHaveCount(1)
+        ->and($res->json('data.baris.0.4'))->toBe('Tidak ada jadwal');
 });
 
 // =====================================================================

@@ -10,6 +10,7 @@ use App\Models\Jurnal;
 use App\Models\JurnalFoto;
 use App\Models\Pegawai;
 use App\Models\PengajuanIzin;
+use App\Models\PenugasanPiket;
 use App\Models\PlottingKelas;
 use App\Models\PresensiPegawai;
 use App\Models\PresensiSiswa;
@@ -33,6 +34,9 @@ use Illuminate\Support\Facades\DB;
  *  - BR-22  daftar siswa = siswa aktif yang terplot di kelas itu pada tahun pelajaran jurnal.
  *  - BR-23  status presensi siswa hanya H/S/I/A.
  *  - BR-26  sesi pada hari izin disetujui tampil "Berhalangan" dan tidak dapat diisi.
+ *           Khusus guru piket hari itu, sesi milik pengampu berhalangan justru
+ *           DAPAT diisi — itulah tugasnya; statusnya tetap "Belum" dengan
+ *           keterangan siapa penggantinya (lihat `sesiSeluruhSekolah()`).
  *  - A-12   maksimal 3 foto per jurnal, dikompres seperti foto presensi.
  */
 class JurnalService
@@ -63,6 +67,12 @@ class JurnalService
      */
     public function sesi(Pegawai $guru, Semester $semester, string $tanggal): array
     {
+        // Guru piket hari itu menangani kelas mana pun (menggantikan pengampu
+        // yang berhalangan), jadi daftar sesinya adalah seluruh kelas sekolah.
+        if ($this->piketPada($guru, $semester, $tanggal) !== null) {
+            return $this->sesiSeluruhSekolah($guru, $semester, $tanggal);
+        }
+
         $hari = CarbonImmutable::parse($tanggal)->isoWeekday();
 
         $jadwal = Jadwal::query()
@@ -198,6 +208,149 @@ class JurnalService
         return $mulai === $selesai ? 'Jam ke-'.$mulai : 'Jam ke-'.$mulai.'-'.$selesai;
     }
 
+    /**
+     * Seluruh sesi sekolah pada satu tanggal — dasar halaman isi jurnal guru piket.
+     *
+     * Berbeda dari `sesi()` biasa yang hanya memuat jadwal guru itu sendiri,
+     * daftar ini memuat jadwal SEMUA guru pada hari tersebut, karena piket
+     * bertugas menggantikan siapa pun yang berhalangan. Status "sudah" dihitung
+     * dari ada/tidaknya jurnal pada sesi itu (siapa pun pemiliknya), bukan dari
+     * jurnal milik guru piket.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function sesiSeluruhSekolah(Pegawai $guru, Semester $semester, string $tanggal): array
+    {
+        $jadwal = Jadwal::query()
+            ->with([
+                'slotJam',
+                'plottingMapel.mapel:id,kode,nama',
+                'plottingMapel.kelas:id,nama',
+                'pegawai:id,nip,nama',
+            ])
+            ->where('semester_id', $semester->id)
+            ->where('hari', CarbonImmutable::parse($tanggal)->isoWeekday())
+            ->get()
+            ->groupBy('pegawai_id');
+
+        $sesi = [];
+
+        foreach ($jadwal as $perGuru) {
+            $pengampu = $perGuru->first()?->pegawai;
+
+            foreach ($this->gabungSesi($perGuru) as $s) {
+                $s['pegawai_id'] = (int) $pengampu?->id;
+                $s['guru'] = $pengampu?->nama;
+                $s['nip'] = $pengampu?->nip;
+                $sesi[] = $s;
+            }
+        }
+
+        // Dikelompokkan per kelas supaya guru piket membaca daftarnya seperti
+        // daftar kelas ("kelas mana yang belum terisi"), bukan per guru.
+        usort($sesi, fn (array $a, array $b): int => [$a['kelas'] ?? '', $a['jam_ke_mulai']] <=> [$b['kelas'] ?? '', $b['jam_ke_mulai']]);
+
+        return $this->tandaiStatusPiket($guru, $semester, $tanggal, $sesi);
+    }
+
+    /**
+     * Status sesi pada daftar guru piket.
+     *
+     * Pengampu yang berhalangan TIDAK membuat sesinya "berhalangan" bagi guru
+     * piket — justru itu tugasnya. Karena itu izin pengampu hanya menjadi
+     * keterangan ("Anda menggantikan"), sedangkan izin guru piket sendiri yang
+     * menghalangi (tidak ada yang menggantikan pengganti).
+     *
+     * @param  list<array<string, mixed>>  $sesi
+     * @return list<array<string, mixed>>
+     */
+    private function tandaiStatusPiket(Pegawai $guru, Semester $semester, string $tanggal, array $sesi): array
+    {
+        if ($sesi === []) {
+            return [];
+        }
+
+        // Jurnal dicari tanpa menyaring pegawai_id: yang menentukan "sudah
+        // diisi" adalah sesi itu sendiri, bukan siapa yang mengisinya.
+        $sudah = Jurnal::query()
+            ->where('semester_id', $semester->id)
+            ->whereDate('tanggal', $tanggal)
+            ->get()
+            ->keyBy(fn (Jurnal $j): string => $j->plotting_mapel_id.':'.$j->jam_ke_mulai);
+
+        $izinPengampu = $this->izinPengampuPada($sesi, $tanggal);
+        $adaPresensi = $this->presensiMasukMemenuhi($guru, $tanggal);
+        $pengajuan = $this->berhalangan($guru, $tanggal);
+
+        foreach ($sesi as $i => $s) {
+            $jurnal = $sudah->get($s['plotting_mapel_id'].':'.$s['jam_ke_mulai']);
+            $izin = $izinPengampu[(int) $s['pegawai_id']] ?? null;
+            $boleh = false;
+
+            if ($pengajuan !== null) {
+                $status = self::BERHALANGAN;
+                $alasan = 'Anda berhalangan — '.$pengajuan->labelJenis().' disetujui.';
+            } elseif ($jurnal !== null) {
+                $status = self::SUDAH;
+                $alasan = null;
+            } else {
+                $status = self::BELUM;
+
+                if (! $adaPresensi) {
+                    $alasan = 'Lakukan presensi masuk terlebih dahulu';
+                } else {
+                    $boleh = true;
+                    $alasan = $izin === null
+                        ? null
+                        : 'Pengampu ('.$s['guru'].') '.$izin->labelJenis().' — Anda menggantikan';
+                }
+            }
+
+            $sesi[$i]['jurnal_id'] = $jurnal?->id;
+            $sesi[$i]['label_jam'] = $jurnal?->labelJamKe() ?? $this->labelJamKe($s['jam_ke_mulai'], $s['jam_ke_selesai']);
+            $sesi[$i]['status'] = $status;
+            $sesi[$i]['alasan'] = $alasan;
+            $sesi[$i]['boleh_isi'] = $boleh;
+        }
+
+        return $sesi;
+    }
+
+    /**
+     * Izin disetujui pada tanggal tersebut, dikunci per pegawai_id.
+     *
+     * Diambil sekali untuk semua sesi agar tidak ada query per sesi (N+1).
+     *
+     * @param  list<array<string, mixed>>  $sesi
+     * @return array<int, PengajuanIzin>
+     */
+    private function izinPengampuPada(array $sesi, string $tanggal): array
+    {
+        $ids = collect($sesi)
+            ->pluck('pegawai_id')
+            ->filter()
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($ids === []) {
+            return [];
+        }
+
+        return PengajuanIzin::query()
+            ->whereIn('pegawai_id', $ids)
+            ->where('status', PengajuanIzin::STATUS_DISETUJUI)
+            // whereDate, bukan perbandingan teks: SQLite menyimpan tanggal sebagai
+            // '2026-10-16 00:00:00', yang secara teks LEBIH BESAR daripada
+            // '2026-10-16' sehingga rentang sehari penuh tidak akan cocok.
+            ->whereDate('tanggal_mulai', '<=', $tanggal)
+            ->whereDate('tanggal_selesai', '>=', $tanggal)
+            ->get()
+            ->keyBy(fn (PengajuanIzin $p): int => (int) $p->pegawai_id)
+            ->all();
+    }
+
     // =====================================================================
     // Gerbang aturan
     // =====================================================================
@@ -206,6 +359,23 @@ class JurnalService
     public function berhalangan(Pegawai $guru, string $tanggal): ?PengajuanIzin
     {
         return $this->pengajuan->berhalanganPada($guru, $tanggal);
+    }
+
+    /**
+     * Penugasan piket guru ini pada tanggal tersebut, bila ada.
+     *
+     * Piket berlaku per hari dalam semester (`penugasan_piket.hari` memakai
+     * penomoran ISO yang sama dengan `jadwal`), dan hanya penugasan aktif yang
+     * menghitung — mencabut penugasan langsung mencabut hak isi jurnal kelas lain.
+     */
+    public function piketPada(Pegawai $guru, Semester $semester, string $tanggal): ?PenugasanPiket
+    {
+        return PenugasanPiket::query()
+            ->untukSemester((int) $semester->id)
+            ->aktif()
+            ->where('pegawai_id', $guru->id)
+            ->where('hari', CarbonImmutable::parse($tanggal)->isoWeekday())
+            ->first();
     }
 
     /**
@@ -263,12 +433,19 @@ class JurnalService
             (int) $data['jam_ke_mulai'],
         );
 
+        // Sesi bisa milik guru lain ketika yang mengisi adalah guru piket hari
+        // itu. Pemilik sesi tetap dicatat di `pegawai_id` — seluruh laporan
+        // kepatuhan bertumpu pada kolom itu — sedangkan penggantinya dicatat
+        // terpisah di `diisi_oleh_pegawai_id` supaya asal-usul isian tetap jelas.
+        $pengampuId = (int) ($sesi['pegawai_id'] ?? $guru->id);
+
         try {
-            $jurnal = DB::transaction(function () use ($user, $guru, $semester, $tanggal, $data, $foto, $sesi): Jurnal {
+            $jurnal = DB::transaction(function () use ($user, $guru, $semester, $tanggal, $data, $foto, $sesi, $pengampuId): Jurnal {
                 $jurnal = Jurnal::create([
                     'semester_id' => $semester->id,
                     'plotting_mapel_id' => $sesi['plotting_mapel_id'],
-                    'pegawai_id' => $guru->id,
+                    'pegawai_id' => $pengampuId,
+                    'diisi_oleh_pegawai_id' => $pengampuId === (int) $guru->id ? null : $guru->id,
                     'kelas_id' => $sesi['kelas_id'],
                     'tanggal' => $tanggal,
                     'jam_ke_mulai' => $sesi['jam_ke_mulai'],

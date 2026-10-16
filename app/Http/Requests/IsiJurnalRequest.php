@@ -81,6 +81,14 @@ class IsiJurnalRequest extends FormRequest
             'materi.required' => 'Materi/topik wajib diisi.',
             'kegiatan.required' => 'Kegiatan pembelajaran wajib diisi.',
             'foto.max' => 'Foto kegiatan maksimal 3 buah.',
+
+            // Galat unggahan berkas datang dari PHP (`upload_max_filesize`/`post_max_size`)
+            // dan dari aturan `file`, sehingga pesannya perlu dibuat jelas bagi pengguna.
+            'foto.*.file' => 'Foto gagal diunggah. Perkecil foto lalu coba lagi.',
+            'foto.*.uploaded' => 'Foto gagal diunggah (melebihi batas server). Perkecil foto lalu coba lagi.',
+            'foto.*.image' => 'Berkas foto harus berupa gambar.',
+            'foto.*.mimes' => 'Format foto harus JPG, PNG, atau WEBP.',
+            'foto.*.max' => 'Ukuran tiap foto maksimal 1 MB.',
         ];
     }
 }

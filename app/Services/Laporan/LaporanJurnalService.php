@@ -7,6 +7,7 @@ namespace App\Services\Laporan;
 use App\Models\Jadwal;
 use App\Models\JamKerja;
 use App\Models\Jurnal;
+use App\Models\Kelas;
 use App\Models\Pegawai;
 use App\Models\PengajuanIzin;
 use App\Models\PresensiPegawai;
@@ -340,6 +341,14 @@ final class LaporanJurnalService
      * memotong satu tanggal dan mengelompokkan hasilnya per kelas, karena yang
      * dicari pengguna adalah "kelas mana yang belum terisi hari ini".
      *
+     * Dua penegasan penting bagi pemantau:
+     *  - SELURUH kelas ikut tampil, termasuk yang tidak punya sesi pada tanggal
+     *    itu (ditandai `tanpa_jadwal`) — kelas yang hilang dari daftar terbaca
+     *    seolah aman;
+     *  - sesi yang SUDAH ada jurnalnya tetap berstatus "sudah" walaupun guru
+     *    pengampunya sedang izin (alur guru piket), sesuai urutan pemeriksaan di
+     *    bawah; `FR-IZN-07`/`BR-26` hanya mengatur sesi yang belum terisi.
+     *
      * Semua data diambil sekali lalu diolah di memori — sama seperti
      * `kepatuhanJurnal` — supaya jumlah query tetap konstan walau jumlah guru
      * dan kelas bertambah.
@@ -379,11 +388,16 @@ final class LaporanJurnalService
             ->get(['id', 'plotting_mapel_id', 'jam_ke_mulai', 'materi'])
             ->keyBy(fn (Jurnal $j): string => $j->plotting_mapel_id.':'.$j->jam_ke_mulai);
 
+        // Rentang tanggal dibandingkan sebagai TANGGAL, bukan string: kolomnya
+        // `date` sementara nilainya tersimpan bergaya datetime, sehingga
+        // perbandingan string biasa membuat izin yang MULAI hari ini tidak
+        // pernah cocok (di SQLite — basis data yang dipakai aplikasi ini —
+        // "2026-10-16 00:00:00" > "2026-10-16").
         $izin = PengajuanIzin::query()
             ->whereIn('pegawai_id', $idGuru)
             ->where('status', PengajuanIzin::STATUS_DISETUJUI)
-            ->where('tanggal_mulai', '<=', $tanggal)
-            ->where('tanggal_selesai', '>=', $tanggal)
+            ->whereDate('tanggal_mulai', '<=', $tanggal)
+            ->whereDate('tanggal_selesai', '>=', $tanggal)
             ->get()
             ->groupBy(fn (PengajuanIzin $i): int => (int) $i->pegawai_id);
 
@@ -401,7 +415,35 @@ final class LaporanJurnalService
 
         $sudahPresensi = array_flip($presensi);
 
+        // Seluruh kelas pada TAHUN PELAJARAN semester ini disemai lebih dulu,
+        // bukan hanya kelas yang punya sesi hari ini: pertanyaan pemantau adalah
+        // "kelas mana yang belum diisi", dan kelas yang hilang dari daftar
+        // justru terbaca seolah aman. Dibatasi satu tahun pelajaran agar kelas
+        // angkatan lain tidak ikut muncul sebagai "tidak ada jadwal", dan kelas
+        // nonaktif ditinggalkan. Kelas tanpa sesi ditandai `tanpa_jadwal`
+        // supaya tidak dihitung sebagai sesi belum terisi.
+        $semuaKelas = Kelas::query()
+            ->untukTahun((int) $semester->tahun_pelajaran_id)
+            ->where('is_active', true)
+            ->when($kelasId !== null, fn ($q) => $q->whereKey($kelasId))
+            ->orderBy('nama')
+            ->get(['id', 'nama']);
+
         $perKelas = [];
+        foreach ($semuaKelas as $k) {
+            $perKelas[(int) $k->id] = [
+                'kelas_id' => (int) $k->id,
+                'nama' => $k->nama,
+                'sesi' => 0,
+                'sudah' => 0,
+                'belum' => 0,
+                'berhalangan' => 0,
+                'tanpa_jadwal' => true,
+                'persen_terisi' => null,
+                'daftar' => [],
+            ];
+        }
+
         foreach ($jadwalPerGuru as $guruId => $daftarJadwal) {
             $guru = $daftarJadwal->first()?->pegawai;
             $izinHari = ($izin->get((int) $guruId) ?? collect())
@@ -412,12 +454,18 @@ final class LaporanJurnalService
                 $kunci = $s['plotting_mapel_id'].':'.$s['jam_ke_mulai'];
                 $jurnal = $sudah->get($kunci);
 
-                if ($izinHari !== null) {
-                    $status = JurnalService::BERHALANGAN;
-                    $alasan = 'Berhalangan — '.$izinHari->labelJenis().' disetujui.';
-                } elseif ($jurnal !== null) {
+                // Jurnal yang ADA menang atas status izin. FR-IZN-07/BR-26
+                // mengatur sesi yang belum terisi pada hari izin; begitu
+                // sesinya benar-benar terisi — justru inilah alur guru piket
+                // menggantikan pengampu yang izin — melaporkannya sebagai
+                // "Berhalangan" membuat dasbor berbohong tentang kelas yang
+                // sudah diisi.
+                if ($jurnal !== null) {
                     $status = JurnalService::SUDAH;
                     $alasan = null;
+                } elseif ($izinHari !== null) {
+                    $status = JurnalService::BERHALANGAN;
+                    $alasan = 'Berhalangan — '.$izinHari->labelJenis().' disetujui.';
                 } else {
                     $status = JurnalService::BELUM;
                     $alasan = $presensiAda ? null : 'Belum presensi masuk';
@@ -431,8 +479,11 @@ final class LaporanJurnalService
                     'sudah' => 0,
                     'belum' => 0,
                     'berhalangan' => 0,
+                    'tanpa_jadwal' => true,
+                    'persen_terisi' => null,
                     'daftar' => [],
                 ];
+                $perKelas[$kelasId]['tanpa_jadwal'] = false;
 
                 $perKelas[$kelasId]['sesi']++;
                 $perKelas[$kelasId][$status === JurnalService::SUDAH
@@ -460,6 +511,11 @@ final class LaporanJurnalService
         $kelas = collect($perKelas)
             ->map(function (array $k): array {
                 usort($k['daftar'], fn (array $a, array $b): int => $a['jam_ke_mulai'] <=> $b['jam_ke_mulai']);
+
+                // Persentase per kelas memakai aturan yang sama dengan angka
+                // sekolah (BR-26): sesi berhalangan keluar dari penyebut.
+                $penyebut = $k['sesi'] - $k['berhalangan'];
+                $k['persen_terisi'] = $penyebut > 0 ? round(100 * $k['sudah'] / $penyebut, 1) : null;
 
                 return $k;
             })
@@ -501,6 +557,13 @@ final class LaporanJurnalService
                     $labelStatus[$s['status']] ?? $s['status'],
                     $s['alasan'] ?? $s['materi'] ?? '-',
                 ];
+            }
+
+            // Kelas tanpa sesi pada tanggal ini tetap muncul sebagai satu baris
+            // ("semua kelas" diminta secara eksplisit), tetapi diberi label
+            // sendiri supaya tidak pernah terbaca sebagai jurnal yang bolong.
+            if ($k['sesi'] === 0) {
+                $baris[] = [$k['nama'], '-', '-', '-', 'Tidak ada jadwal', 'Tidak ada sesi terjadwal pada hari ini'];
             }
         }
 

@@ -50,6 +50,9 @@ class JurnalResource extends JsonResource
                 'B' => (int) ($this->jumlah_bolos ?? 0),
             ],
             'diubah_pada' => $this->updated_at?->toIso8601String(),
+            // Pengganti (guru piket) yang mengisi sesi ini; null = pengampu sendiri.
+            'diisi_oleh_pegawai_id' => $this->diisi_oleh_pegawai_id,
+            'diisi_oleh' => $this->whenLoaded('diisiOleh', fn () => $this->diisiOleh?->nama),
         ];
     }
 

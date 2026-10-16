@@ -17,6 +17,7 @@ use App\Models\Role;
 use App\Models\Semester;
 use App\Services\JurnalService;
 use App\Support\ResponsDaftar;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -46,10 +47,22 @@ final class JurnalController extends Controller
         $tanggal = (string) ($request->query('tanggal') ?: now()->toDateString());
         $sesi = $this->jurnal->sesi($pegawai, $semester, $tanggal);
 
+        // Guru piket hari itu menerima daftar sesi seluruh kelas (lihat
+        // `JurnalService::sesi()`); penandanya ikut dikirim supaya antarmuka bisa
+        // membedakan "jadwal saya" dari "tugas piket saya" — keduanya sama-sama
+        // boleh diisi, tetapi hanya sesi piket yang boleh milik kelas lain.
+        $piket = $this->jurnal->piketPada($pegawai, $semester, $tanggal);
+
         return response()->json([
             'data' => [
                 'tanggal' => $tanggal,
                 'semester' => new SemesterResource($semester),
+                'piket' => [
+                    'bertugas' => $piket !== null,
+                    'hari' => (int) ($piket?->hari ?? CarbonImmutable::parse($tanggal)->isoWeekday()),
+                    'nama_hari' => $piket?->namaHari(),
+                    'catatan' => $piket?->catatan,
+                ],
                 'sesi' => $sesi,
                 'ringkasan' => [
                     'total' => count($sesi),
@@ -274,6 +287,13 @@ final class JurnalController extends Controller
         }
 
         $pegawai = $this->pegawaiSendiri($request);
+
+        // Guru piket hari itu boleh menyunting jurnal kelas lain yang ia isi
+        // sendiri (pengganti pengampu berhalangan) — jejaknya ada di
+        // `diisi_oleh_pegawai_id`, jadi tidak perlu menghitung ulang piket.
+        if ((int) $jurnal->diisi_oleh_pegawai_id === (int) $pegawai->id) {
+            return;
+        }
 
         if ((int) $jurnal->pegawai_id !== (int) $pegawai->id) {
             throw new AturanBisnisException('Anda tidak berhak atas jurnal ini.', 'AKSES_DITOLAK', 403);

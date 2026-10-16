@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\Akademik\JadwalController;
 use App\Http\Controllers\Api\V1\Akademik\JamPelajaranController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\Jurnal\JurnalController;
+use App\Http\Controllers\Api\V1\Jurnal\PenugasanPiketController;
 use App\Http\Controllers\Api\V1\Laporan\LaporanDokumenController;
 use App\Http\Controllers\Api\V1\Laporan\LaporanJurnalController;
 use App\Http\Controllers\Api\V1\Laporan\LaporanPresensiController;
@@ -356,6 +357,26 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/{jurnal}', [JurnalController::class, 'tampil'])->whereNumber('jurnal');
             Route::put('/{jurnal}', [JurnalController::class, 'perbarui'])->whereNumber('jurnal');
             Route::get('/{jurnal}/presensi-siswa', [JurnalController::class, 'presensiSiswa'])->whereNumber('jurnal');
+        });
+
+        /* -------------------- penugasan guru piket (menu admin) -------------------- */
+        // Menetapkan siapa piket pada hari apa, per semester. Hak menulis jurnal
+        // kelas orang lain berasal langsung dari penugasan ini, jadi hanya admin
+        // yang boleh menetapkan maupun mencabutnya (bukan wakasek: penetapan ini
+        // menentukan siapa yang boleh mengoreksi jurnal guru lain).
+        Route::middleware('peran:admin')->prefix('penugasan-piket')->group(function (): void {
+            // Daftar penugasan; tanpa `semester_id` memakai semester aktif.
+            Route::get('/', [PenugasanPiketController::class, 'index']);
+
+            // Pilihan guru aktif berjenis 'guru' untuk layar penetapan.
+            Route::get('/pegawai', [PenugasanPiketController::class, 'pegawai']);
+
+            Route::post('/', [PenugasanPiketController::class, 'store']);
+
+            // Literal '/pegawai' didaftarkan lebih dulu; batas angka melindungi
+            // rute tersebut agar tidak tertangkap sebagai {penugasanPiket}.
+            Route::put('/{penugasanPiket}', [PenugasanPiketController::class, 'update'])->whereNumber('penugasanPiket');
+            Route::delete('/{penugasanPiket}', [PenugasanPiketController::class, 'destroy'])->whereNumber('penugasanPiket');
         });
 
         /* ===================================================================

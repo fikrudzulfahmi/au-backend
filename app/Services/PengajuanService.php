@@ -266,8 +266,11 @@ final class PengajuanService
         return PengajuanIzin::query()
             ->where('pegawai_id', $pegawai->getKey())
             ->where('status', PengajuanIzin::STATUS_DISETUJUI)
-            ->where('tanggal_mulai', '<=', $tanggal)
-            ->where('tanggal_selesai', '>=', $tanggal)
+            // whereDate, bukan perbandingan teks: pada SQLite tanggal tersimpan
+            // sebagai '2026-10-16 00:00:00' yang secara teks lebih besar daripada
+            // '2026-10-16', sehingga izin sehari penuh tak pernah terdeteksi.
+            ->whereDate('tanggal_mulai', '<=', $tanggal)
+            ->whereDate('tanggal_selesai', '>=', $tanggal)
             ->first();
     }
 
