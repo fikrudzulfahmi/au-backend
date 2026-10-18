@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Exceptions\AturanBisnisException;
+use App\Models\HariLibur;
 use App\Models\Jadwal;
 use App\Models\Jurnal;
 use App\Models\JurnalFoto;
@@ -29,6 +30,7 @@ use Illuminate\Support\Facades\DB;
  *
  * Aturan yang ditegakkan di sini:
  *  - BR-19  jurnal tanggal T hanya bila ada presensi masuk T yang dihitung.
+ *  - KP-4.x  jurnal hanya diisi untuk HARI INI, dan tidak diisi pada hari libur.
  *  - BR-20  jurnal boleh diedit kapan pun oleh pemiliknya; setiap edit dicatat.
  *  - BR-21  satu sesi satu jurnal (ditegakkan juga oleh indeks unik database).
  *  - BR-22  daftar siswa = siswa aktif yang terplot di kelas itu pada tahun pelajaran jurnal.
@@ -393,6 +395,20 @@ class JurnalService
             ->exists();
     }
 
+    /** BR-24/KP-5.4 — hari libur pada tahun pelajaran semester ini, bila ada. */
+    public function liburPada(Semester $semester, string $tanggal): ?HariLibur
+    {
+        return HariLibur::query()
+            ->where('tahun_pelajaran_id', $semester->tahun_pelajaran_id)
+            // whereDate, bukan perbandingan string: kolom `date` tersimpan
+            // bergaya datetime di SQLite sehingga hari pertama libur tidak
+            // pernah cocok bila dibandingkan sebagai teks.
+            ->whereDate('tanggal_mulai', '<=', $tanggal)
+            ->whereDate('tanggal_selesai', '>=', $tanggal)
+            ->orderBy('tanggal_mulai')
+            ->first();
+    }
+
     /**
      * BR-22 — siswa `aktif` yang terplot di kelas itu pada tahun pelajaran jurnal.
      *
@@ -492,6 +508,30 @@ class JurnalService
      */
     private function sesiUntuk(Pegawai $guru, Semester $semester, string $tanggal, int $plottingMapelId, int $jamKeMulai): array
     {
+        // Pengisian terikat hari berjalan: tanggal lampau maupun mendatang
+        // ditolak, termasuk bila permintaan dikirim langsung ke API (tautan
+        // lama atau tab yang dibiarkan terbuka semalaman).
+        if ($tanggal !== CarbonImmutable::now()->toDateString()) {
+            throw AturanBisnisException::tolak(
+                'Jurnal hanya dapat diisi pada hari ini.',
+                'tanggal',
+                'HANYA_HARI_INI',
+            );
+        }
+
+        // Hari libur tidak punya kewajiban jurnal, jadi pengisiannya ditolak.
+        $libur = $this->liburPada($semester, $tanggal);
+
+        if ($libur !== null) {
+            throw AturanBisnisException::tolak(
+                'Hari ini libur'
+                    .($libur->keterangan ? ' ('.$libur->keterangan.')' : '')
+                    .', jurnal tidak perlu diisi.',
+                'tanggal',
+                'HARI_LIBUR',
+            );
+        }
+
         // KP-4.6 — sesi pada hari izin disetujui tampil "Berhalangan" dan tidak dapat diisi.
         $pengajuan = $this->berhalangan($guru, $tanggal);
 

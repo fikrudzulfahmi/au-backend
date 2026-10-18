@@ -13,6 +13,7 @@ use App\Models\Semester;
 use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\JurnalService;
+use Carbon\CarbonImmutable;
 
 /*
 |--------------------------------------------------------------------------
@@ -23,6 +24,9 @@ use App\Services\JurnalService;
 
 beforeEach(function (): void {
     siapkanPeran();
+    // Jurnal hanya boleh diisi pada hari berjalan (aturan baru), sedangkan
+    // seluruh rangkaian uji ini disusun untuk Senin 5 Oktober 2026.
+    $this->travelTo(CarbonImmutable::parse(seninUji().' 07:30:00'));
 });
 
 // =====================================================================
@@ -364,4 +368,66 @@ it('menolak permintaan bila belum ada semester aktif', function () {
         ->getJson('/api/v1/jurnal/sesi-hari-ini')
         ->assertStatus(422)
         ->assertJsonPath('code', 'TANPA_SEMESTER_AKTIF');
+});
+
+// =====================================================================
+// Pengisian terikat hari ini & hari libur
+// =====================================================================
+
+it('menolak pengisian jurnal untuk tanggal lampau', function () {
+    $r = siapkanJurnal();
+
+    $this->actingAs($r['user'])
+        ->postJson('/api/v1/jurnal', badanJurnal($r, $r['siswa']->all(), ['tanggal' => '2026-09-28']))
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'HANYA_HARI_INI')
+        ->assertJsonPath('message', 'Jurnal hanya dapat diisi pada hari ini.');
+});
+
+it('menolak pengisian jurnal untuk tanggal mendatang', function () {
+    $r = siapkanJurnal();
+
+    $this->actingAs($r['user'])
+        ->postJson('/api/v1/jurnal', badanJurnal($r, $r['siswa']->all(), ['tanggal' => '2026-10-12']))
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'HANYA_HARI_INI');
+});
+
+it('menolak pengisian jurnal pada hari libur', function () {
+    $r = siapkanJurnal();
+    tandaiLibur($r['tahun'], seninUji(), null, 'Libur uji');
+
+    $this->actingAs($r['user'])
+        ->postJson('/api/v1/jurnal', badanJurnal($r, $r['siswa']->all()))
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'HARI_LIBUR')
+        ->assertJsonPath('message', 'Hari ini libur (Libur uji), jurnal tidak perlu diisi.');
+});
+
+it('mengirim penanda libur dan larangan mengisi pada daftar sesi', function () {
+    $r = siapkanJurnal();
+    tandaiLibur($r['tahun'], seninUji(), null, 'Libur uji');
+
+    $this->actingAs($r['user'])
+        ->getJson('/api/v1/jurnal/sesi-hari-ini?tanggal='.seninUji())
+        ->assertOk()
+        ->assertJsonPath('data.hari_ini', seninUji())
+        ->assertJsonPath('data.boleh_isi', false)
+        ->assertJsonPath('data.libur.ada', true)
+        ->assertJsonPath('data.libur.keterangan', 'Libur uji');
+});
+
+it('menandai boleh_isi hanya untuk tanggal hari ini', function () {
+    $r = siapkanJurnal();
+
+    $this->actingAs($r['user'])
+        ->getJson('/api/v1/jurnal/sesi-hari-ini?tanggal='.seninUji())
+        ->assertOk()
+        ->assertJsonPath('data.boleh_isi', true)
+        ->assertJsonPath('data.libur.ada', false);
+
+    $this->actingAs($r['user'])
+        ->getJson('/api/v1/jurnal/sesi-hari-ini?tanggal=2026-10-12')
+        ->assertOk()
+        ->assertJsonPath('data.boleh_isi', false);
 });

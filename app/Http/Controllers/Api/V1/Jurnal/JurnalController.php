@@ -47,6 +47,13 @@ final class JurnalController extends Controller
         $tanggal = (string) ($request->query('tanggal') ?: now()->toDateString());
         $sesi = $this->jurnal->sesi($pegawai, $semester, $tanggal);
 
+        // Pengisian hanya untuk hari berjalan dan bukan hari libur; tanggal
+        // lampau tetap dapat DIBACA (dipakai halaman ubah jurnal lama), tetapi
+        // tidak menawarkan tombol isi.
+        $hariIni = CarbonImmutable::now()->toDateString();
+        $libur = $this->jurnal->liburPada($semester, $tanggal);
+        $bolehIsi = $tanggal === $hariIni && $libur === null;
+
         // Guru piket hari itu menerima daftar sesi seluruh kelas (lihat
         // `JurnalService::sesi()`); penandanya ikut dikirim supaya antarmuka bisa
         // membedakan "jadwal saya" dari "tugas piket saya" — keduanya sama-sama
@@ -56,6 +63,14 @@ final class JurnalController extends Controller
         return response()->json([
             'data' => [
                 'tanggal' => $tanggal,
+                'hari_ini' => $hariIni,
+                'boleh_isi' => $bolehIsi,
+                'libur' => [
+                    'ada' => $libur !== null,
+                    'keterangan' => $libur?->keterangan,
+                    'tanggal_mulai' => $libur?->tanggal_mulai?->toDateString(),
+                    'tanggal_selesai' => $libur?->tanggal_selesai?->toDateString(),
+                ],
                 'semester' => new SemesterResource($semester),
                 'piket' => [
                     'bertugas' => $piket !== null,

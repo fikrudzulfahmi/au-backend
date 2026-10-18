@@ -11,6 +11,7 @@ use App\Models\PresensiPegawai;
 use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\JurnalService;
+use Carbon\CarbonImmutable;
 use Database\Seeders\PenugasanPiketSeeder;
 
 /*
@@ -27,6 +28,8 @@ use Database\Seeders\PenugasanPiketSeeder;
 
 beforeEach(function (): void {
     siapkanPeran();
+    // Jurnal hanya boleh diisi pada hari berjalan; rangkaian uji memakai Senin 5 Oktober 2026.
+    $this->travelTo(CarbonImmutable::parse(seninUji().' 07:30:00'));
 });
 
 /**

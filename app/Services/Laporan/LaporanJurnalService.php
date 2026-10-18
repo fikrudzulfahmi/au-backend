@@ -365,6 +365,47 @@ final class LaporanJurnalService
         $hari = CarbonImmutable::parse($tanggal)->isoWeekday();
         $t = CarbonImmutable::parse($tanggal);
 
+        // Hari libur tidak punya kewajiban jurnal (KP-5.4/BR-24): tidak ada
+        // sesi yang boleh dihitung "belum terisi". Penanda libur tetap dikirim
+        // supaya dasbor menerangkan sebabnya, bukan menampilkan nol tanpa alasan.
+        $libur = $this->jurnal->liburPada($semester, $tanggal);
+
+        if ($libur !== null) {
+            $nihil = [
+                'kelas' => 0,
+                'sesi' => 0,
+                'sudah' => 0,
+                'belum' => 0,
+                'berhalangan' => 0,
+                'persen_terisi' => null,
+            ];
+
+            return [
+                'kode' => 'FR-LAP-13',
+                'judul' => 'Pengisian Jurnal Harian',
+                'periode' => PeriodeLaporan::tanggalPanjang($t),
+                'tanggal' => $t->toDateString(),
+                'hari' => JamKerja::DAFTAR_HARI[$t->dayOfWeekIso] ?? null,
+                'hitung' => $nihil,
+                'kelas' => [],
+                'kolom' => ['Kelas', 'Jam', 'Mapel', 'Guru', 'Status', 'Keterangan / Materi'],
+                'baris' => [],
+                'libur' => [
+                    'ada' => true,
+                    'keterangan' => $libur->keterangan,
+                    'tanggal_mulai' => $libur->tanggal_mulai?->toDateString(),
+                    'tanggal_selesai' => $libur->tanggal_selesai?->toDateString(),
+                ],
+                'ringkasan' => [
+                    ['label' => 'Kelas', 'nilai' => 0],
+                    ['label' => 'Sesi', 'nilai' => 0],
+                    ['label' => 'Terisi', 'nilai' => 0],
+                    ['label' => 'Belum', 'nilai' => 0],
+                    ['label' => 'Berhalangan', 'nilai' => 0],
+                ],
+            ];
+        }
+
         // Hanya guru aktif: jadwal guru yang sudah nonaktif tidak dicetak di dasbor.
         $jadwalPerGuru = Jadwal::query()
             ->with([
@@ -582,6 +623,12 @@ final class LaporanJurnalService
             'kelas' => $kelas,
             'kolom' => ['Kelas', 'Jam', 'Mapel', 'Guru', 'Status', 'Keterangan / Materi'],
             'baris' => $baris,
+            'libur' => [
+                'ada' => false,
+                'keterangan' => null,
+                'tanggal_mulai' => null,
+                'tanggal_selesai' => null,
+            ],
             'ringkasan' => [
                 ['label' => 'Kelas', 'nilai' => $hitung['kelas']],
                 ['label' => 'Sesi', 'nilai' => $hitung['sesi']],

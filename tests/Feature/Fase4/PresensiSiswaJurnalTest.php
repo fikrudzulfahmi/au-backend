@@ -10,6 +10,7 @@ use App\Models\PlottingKelas;
 use App\Models\PresensiSiswa;
 use App\Models\Siswa;
 use App\Services\JurnalService;
+use Carbon\CarbonImmutable;
 
 /*
 |--------------------------------------------------------------------------
@@ -20,6 +21,8 @@ use App\Services\JurnalService;
 
 beforeEach(function (): void {
     siapkanPeran();
+    // Jurnal hanya boleh diisi pada hari berjalan; rangkaian uji memakai Senin 5 Oktober 2026.
+    $this->travelTo(CarbonImmutable::parse(seninUji().' 07:30:00'));
 });
 
 // =====================================================================

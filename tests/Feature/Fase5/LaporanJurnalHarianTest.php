@@ -289,3 +289,23 @@ it('dapat diekspor ke Excel berisi kolom dan baris sesi', function () {
 
     $spreadsheet->disconnectWorksheets();
 });
+
+// =====================================================================
+// Hari libur — tidak ada kewajiban jurnal (KP-5.4/BR-24)
+// =====================================================================
+
+it('tidak menghitung sesi apa pun pada hari libur', function () {
+    $r = rangkaianHarian();
+    tandaiLibur($r['tahun'], seninUji(), null, 'Libur sekolah');
+
+    $res = $this->actingAs(sebagaiAdmin())
+        ->getJson('/api/v1/laporan/jurnal/harian?tanggal='.seninUji())
+        ->assertOk()
+        ->assertJsonPath('data.libur.ada', true)
+        ->assertJsonPath('data.libur.keterangan', 'Libur sekolah')
+        ->assertJsonPath('data.hitung.sesi', 0)
+        ->assertJsonPath('data.hitung.belum', 0)
+        ->assertJsonPath('data.hitung.persen_terisi', null);
+
+    expect($res->json('data.kelas'))->toBe([]);
+});
