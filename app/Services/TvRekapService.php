@@ -204,7 +204,7 @@ class TvRekapService
      * Keterisian jurnal per kelas untuk layar TV — sumber yang sama dengan
      * dasbor admin (`harianKelas`). Tanpa NIP dan tanpa materi/alasan (BR-33).
      *
-     * @param array<string, mixed> $harian
+     * @param  array<string, mixed>  $harian
      * @return array<int, array<string, mixed>>
      */
     private function kelasHariIni(array $harian): array
