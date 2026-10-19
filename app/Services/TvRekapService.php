@@ -114,6 +114,7 @@ class TvRekapService
                 'inisial' => self::inisial((string) $b['nama']),
                 'nama' => $b['nama'],
                 'jam_masuk' => $b['masuk_jam'],
+                'menit_terlambat' => (int) ($b['menit_terlambat'] ?? 0),
                 'status' => $b['status'],
                 'label_status' => $b['label_status'],
             ])

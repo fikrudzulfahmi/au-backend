@@ -99,7 +99,7 @@ it('BR-37 kolom presensi memuat daftar pegawai tanpa NIP', function (): void {
     $tv = test()->withToken($token)->getJson('/api/v1/tv/rekap?tanggal='.seninUji())->json('data');
 
     expect($tv['presensi']['sudah_presensi'])->not->toBeEmpty();
-    expect($tv['presensi']['sudah_presensi'][0])->toHaveKeys(['inisial', 'nama', 'jam_masuk', 'status']);
+    expect($tv['presensi']['sudah_presensi'][0])->toHaveKeys(['inisial', 'nama', 'jam_masuk', 'menit_terlambat', 'status']);
 });
 
 it('BR-33 respons TV tidak memuat data pribadi atau berkas privat', function (): void {
