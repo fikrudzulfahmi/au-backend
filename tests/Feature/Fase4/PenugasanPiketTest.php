@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 use App\Models\AuditLog;
 use App\Models\Jurnal;
-use App\Models\PengajuanIzin;
 use App\Models\Pegawai;
+use App\Models\PengajuanIzin;
 use App\Models\PenugasanPiket;
 use App\Models\PolaJamHari;
 use App\Models\PresensiPegawai;
