@@ -206,3 +206,26 @@ it('KP-6.3 memuat tiga kolom, jam server, dan pengumuman tayang', function (): v
         ->and($tv['pengumuman']['kartu'][0]['penting'])->toBeTrue()
         ->and($tv['pengumuman']['teks_berjalan'])->toBe(['Teks berjalan uji']);
 });
+
+it('FR-TV-07 jurnal TV memuat keterisian per kelas yang sama dengan dasbor admin', function (): void {
+    $this->travelTo(CarbonImmutable::parse('2026-10-05 09:00:00'));
+
+    $rangkaian = siapkanJurnal(false);
+    pasangJamKerja();
+
+    $tv = test()->withToken(tvRekapToken())
+        ->getJson('/api/v1/tv/rekap?tanggal='.seninUji())
+        ->assertOk()
+        ->json('data');
+
+    $harian = app(LaporanJurnalService::class)->harianKelas($rangkaian['semester'], seninUji());
+
+    expect($tv['jurnal']['kelas'])->not->toBeEmpty()
+        ->and(array_column($tv['jurnal']['kelas'], 'nama'))->toEqual(array_column($harian['kelas'], 'nama'))
+        ->and(array_sum(array_column($tv['jurnal']['kelas'], 'belum')))->toBe($harian['hitung']['belum'])
+        ->and($tv['jurnal']['libur'])->toBeNull();
+
+    $sesi = collect($tv['jurnal']['kelas'])->firstWhere('tanpa_jadwal', false)['daftar'][0];
+    expect($sesi)->toHaveKeys(['label_jam', 'mapel', 'guru', 'status'])
+        ->and($sesi)->not->toHaveKeys(['nip', 'materi', 'alasan']);
+});

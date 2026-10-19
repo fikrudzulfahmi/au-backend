@@ -66,7 +66,7 @@ class TvSesiService
         return $kode;
     }
 
-    /** Memeriksa apakah sebuah kode (atau NPSN yang diizinkan) cocok. */
+    /** Memeriksa apakah sebuah kode cocok. */
     public function kodeCocok(?string $kode): bool
     {
         if ($kode === null || $kode === '') {

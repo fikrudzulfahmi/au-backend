@@ -53,7 +53,7 @@ class PengumumanController extends Controller
         $daftar = Pengumuman::query()
             ->tayang()
             ->target(Pengumuman::TARGET_APP)
-            ->orderByRaw("FIELD(prioritas, 'penting', 'normal')")
+            ->orderByRaw("CASE prioritas WHEN 'penting' THEN 0 ELSE 1 END")
             ->orderByDesc('tanggal_mulai')
             ->get();
 

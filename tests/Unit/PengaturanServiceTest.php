@@ -16,7 +16,7 @@ it('memberi nilai default sesuai spesifikasi 7.6 dan FR-LOK-05', function (): vo
         ->and($service->ambil('foto_kualitas_jpeg'))->toBe(65)
         ->and($service->ambil('foto_target_maks_kb'))->toBe(150)
         ->and($service->ambil('tv_interval_detik'))->toBe(30)
-        ->and($service->ambil('tv_tema'))->toBe('gelap')
+        ->and($service->ambil('tv_tema'))->toBe('terang')
         ->and($service->ambil('tv_tampilkan_alasan_izin'))->toBeFalse();
 });
 

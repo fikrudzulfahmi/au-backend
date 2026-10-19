@@ -23,7 +23,7 @@ it('FR-TV-16 admin melihat pengaturan TV beserta kode aktif', function (): void 
     $data = test()->actingAs($admin)->getJson('/api/v1/pengaturan/tv')->assertOk()->json('data');
 
     expect($data)->toHaveKeys([
-        'tv_aktif', 'tv_izinkan_npsn', 'tv_interval_detik', 'tv_masa_berlaku_hari',
+        'tv_aktif', 'tv_interval_detik', 'tv_masa_berlaku_hari',
         'tv_tema', 'tv_skala_font', 'tv_tampilkan_alasan_izin', 'tv_tampilkan_ulang_tahun',
         'tv_rotasi_panel_detik', 'tv_kecepatan_scroll', 'kode',
     ])
@@ -36,7 +36,6 @@ it('FR-TV-16 admin dapat menyimpan pengaturan tampilan', function (): void {
 
     test()->actingAs($admin)->putJson('/api/v1/pengaturan/tv', [
         'tv_aktif' => true,
-        'tv_izinkan_npsn' => false,
         'tv_interval_detik' => 60,
         'tv_masa_berlaku_hari' => 14,
         'tv_tema' => 'terang',
@@ -56,7 +55,6 @@ it('FR-TV-16 interval refresh di luar 10–120 detik ditolak', function (): void
 
     test()->actingAs($admin)->putJson('/api/v1/pengaturan/tv', [
         'tv_aktif' => true,
-        'tv_izinkan_npsn' => true,
         'tv_interval_detik' => 5,
         'tv_masa_berlaku_hari' => 30,
         'tv_tema' => 'gelap',

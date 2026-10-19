@@ -157,10 +157,13 @@ class TvRekapService
                 'berhalangan' => 0,
                 'persen' => null,
                 'guru_belum' => [],
+                'kelas' => [],
+                'libur' => null,
                 'presensi_siswa' => $presensiSiswa,
             ];
         }
 
+        $harian = $this->jurnal->harianKelas($semester, $saat->toDateString());
         $hasil = $this->jurnal->kepatuhanJurnal($semester, PeriodeLaporan::buat(['periode' => 'hari_ini']));
 
         $nilai = collect($hasil['ringkasan'])->pluck('nilai', 'label');
@@ -191,8 +194,44 @@ class TvRekapService
             'berhalangan' => $berhalangan,
             'persen' => $penyebut > 0 ? round(100 * $terisi / $penyebut, 1) : null,
             'guru_belum' => $guruBelum,
+            'kelas' => $this->kelasHariIni($harian),
+            'libur' => ($harian['libur']['ada'] ?? false) ? ['keterangan' => $harian['libur']['keterangan']] : null,
             'presensi_siswa' => $presensiSiswa,
         ];
+    }
+
+    /**
+     * Keterisian jurnal per kelas untuk layar TV — sumber yang sama dengan
+     * dasbor admin (`harianKelas`). Tanpa NIP dan tanpa materi/alasan (BR-33).
+     *
+     * @param array<string, mixed> $harian
+     * @return array<int, array<string, mixed>>
+     */
+    private function kelasHariIni(array $harian): array
+    {
+        return collect($harian['kelas'])
+            ->map(fn (array $k): array => [
+                'kelas_id' => $k['kelas_id'],
+                'nama' => $k['nama'],
+                'sesi' => $k['sesi'],
+                'sudah' => $k['sudah'],
+                'belum' => $k['belum'],
+                'berhalangan' => $k['berhalangan'],
+                'tanpa_jadwal' => $k['tanpa_jadwal'],
+                'persen_terisi' => $k['persen_terisi'],
+                'daftar' => collect($k['daftar'])
+                    ->map(fn (array $d): array => [
+                        'label_jam' => $d['label_jam'],
+                        'jam_ke_mulai' => $d['jam_ke_mulai'],
+                        'mapel' => $d['mapel'],
+                        'guru' => $d['guru'],
+                        'status' => $d['status'],
+                    ])
+                    ->values()
+                    ->all(),
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -291,7 +330,7 @@ class TvRekapService
     {
         return [
             'interval_detik' => (int) $this->pengaturan->ambil('tv_interval_detik', 30),
-            'tema' => (string) $this->pengaturan->ambil('tv_tema', 'gelap'),
+            'tema' => (string) $this->pengaturan->ambil('tv_tema', 'terang'),
             'skala_font' => (string) $this->pengaturan->ambil('tv_skala_font', 'besar'),
             'rotasi_panel_detik' => (int) $this->pengaturan->ambil('tv_rotasi_panel_detik', 10),
             'kecepatan_scroll' => (string) $this->pengaturan->ambil('tv_kecepatan_scroll', 'normal'),

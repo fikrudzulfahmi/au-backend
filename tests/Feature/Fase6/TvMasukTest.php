@@ -52,12 +52,9 @@ it('FR-TV-02/03 kode TV benar menerbitkan token read-only 30 hari', function ():
         ->and($sesi->token_hash)->not->toBe($respon->json('data.token'));
 });
 
-it('FR-TV-02 NPSN diterima saat opsi izinkan NPSN aktif', function (): void {
+it('FR-TV-02 NPSN tidak lagi diterima sebagai pengganti kode', function (): void {
     profilSekolah(['npsn' => '20512345']);
 
-    test()->postJson('/api/v1/tv/masuk', ['npsn' => '20512345'])->assertOk();
-
-    app(PengaturanService::class)->simpan('tv_izinkan_npsn', false);
     test()->postJson('/api/v1/tv/masuk', ['npsn' => '20512345'])->assertStatus(401);
 });
 

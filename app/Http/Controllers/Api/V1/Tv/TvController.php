@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\RateLimiter;
 /**
  * 5.19 — endpoint Layar TV (baca saja).
  *
- * FR-TV-02/03: `masuk` menerima kode TV (atau NPSN bila `tv_izinkan_npsn`) dan
+ * FR-TV-02/03: `masuk` menerima kode TV dan
  * menerbitkan token TV read-only. BR-32 mengunci percobaan kode salah
  * 5×/menit/IP. Token TV hanya diterima middleware `tv`.
  */
@@ -31,12 +31,11 @@ class TvController extends Controller
         private readonly TvRekapService $rekap,
     ) {}
 
-    /** FR-TV-02/03 — masuk memakai kode TV atau NPSN. Tanpa login pengguna. */
+    /** FR-TV-02/03 — masuk memakai kode TV. Tanpa login pengguna. */
     public function masuk(Request $request): JsonResponse
     {
         $data = $request->validate([
             'kode' => ['nullable', 'string', 'max:32'],
-            'npsn' => ['nullable', 'string', 'max:16'],
             'nama_perangkat' => ['nullable', 'string', 'max:191'],
         ]);
 
@@ -58,14 +57,11 @@ class TvController extends Controller
             ], 429);
         }
 
-        $cocokKode = $this->sesi->kodeCocok($data['kode'] ?? null);
-        $cocokNpsn = $this->npsnCocok($data['npsn'] ?? null);
-
-        if (! $cocokKode && ! $cocokNpsn) {
+        if (! $this->sesi->kodeCocok($data['kode'] ?? null)) {
             RateLimiter::hit($kunci, 60);
 
             return response()->json([
-                'message' => 'Kode TV atau NPSN tidak cocok.',
+                'message' => 'Kode TV tidak cocok.',
                 'code' => 'KODE_TV_SALAH',
             ], 401);
         }
@@ -121,23 +117,5 @@ class TvController extends Controller
             'tagline' => $sekolah->tagline,
             'nama_kepala_sekolah' => $sekolah->nama_kepala_sekolah,
         ];
-    }
-
-    /** BR-32 — NPSN diterima hanya bila `tv_izinkan_npsn` aktif. */
-    private function npsnCocok(?string $npsn): bool
-    {
-        if ($npsn === null || trim($npsn) === '') {
-            return false;
-        }
-
-        if (! (bool) $this->pengaturan->ambil('tv_izinkan_npsn')) {
-            return false;
-        }
-
-        $milikSekolah = ProfilSekolah::query()->value('npsn');
-
-        return $milikSekolah !== null
-            && trim((string) $milikSekolah) !== ''
-            && trim($npsn) === trim((string) $milikSekolah);
     }
 }

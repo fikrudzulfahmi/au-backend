@@ -23,7 +23,7 @@ class PengumumanService
         return Pengumuman::query()
             ->tayang($saat)
             ->target($kolomTarget)
-            ->orderByRaw("FIELD(prioritas, 'penting', 'normal')")
+            ->orderByRaw("CASE prioritas WHEN 'penting' THEN 0 ELSE 1 END")
             ->orderByDesc('tanggal_mulai')
             ->orderByDesc('id')
             ->get();

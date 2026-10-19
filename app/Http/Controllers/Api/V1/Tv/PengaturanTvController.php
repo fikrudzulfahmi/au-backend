@@ -16,7 +16,7 @@ use Illuminate\Http\Request;
 /**
  * FR-TV-16 — pengaturan Layar TV (admin).
  *
- * Termasuk: aktif/nonaktif, lihat & buat ulang kode TV (BR-35), izinkan NPSN,
+ * Termasuk: aktif/nonaktif, lihat & buat ulang kode TV (BR-35),
  * interval refresh, tema, skala font, opsi alasan izin & ulang tahun, durasi
  * rotasi panel, masa berlaku token, daftar sesi TV aktif dengan tombol cabut,
  * dan pratinjau.
@@ -39,7 +39,6 @@ class PengaturanTvController extends Controller
     {
         $data = $request->validate([
             'tv_aktif' => ['required', 'boolean'],
-            'tv_izinkan_npsn' => ['required', 'boolean'],
             'tv_interval_detik' => ['required', 'integer', 'between:10,120'],
             'tv_masa_berlaku_hari' => ['required', 'integer', 'between:1,365'],
             'tv_tema' => ['required', 'in:terang,gelap'],
@@ -137,7 +136,6 @@ class PengaturanTvController extends Controller
     {
         return [
             'tv_aktif' => (bool) $this->pengaturan->ambil('tv_aktif'),
-            'tv_izinkan_npsn' => (bool) $this->pengaturan->ambil('tv_izinkan_npsn'),
             'tv_interval_detik' => (int) $this->pengaturan->ambil('tv_interval_detik'),
             'tv_masa_berlaku_hari' => (int) $this->pengaturan->ambil('tv_masa_berlaku_hari'),
             'tv_tema' => (string) $this->pengaturan->ambil('tv_tema'),
