@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\AuditLog;
 use App\Models\Jurnal;
+use App\Models\PengajuanIzin;
 use App\Models\Pegawai;
 use App\Models\PenugasanPiket;
 use App\Models\PolaJamHari;
@@ -233,7 +234,8 @@ it('menolak penugasan untuk pegawai atau semester yang tidak ada', function (): 
 /* ------------------------- Hak mengisi jurnal (BR-26) ------------------------- */
 
 it('membuat guru piket melihat seluruh sesi sekolah pada hari tugasnya', function (): void {
-    $r = siapkanJurnal();
+    // Pengampu tidak presensi (alpa) — kondisi yang membuka hak piket.
+    $r = siapkanJurnal(false);
     $piket = siapkanGuruPiket($r);
 
     // Hari lain: tetap sesi milik sendiri saja.
@@ -257,7 +259,8 @@ it('membuat guru piket melihat seluruh sesi sekolah pada hari tugasnya', functio
 });
 
 it('mencatat jurnal yang diisi guru piket atas nama pengampu', function (): void {
-    $r = siapkanJurnal();
+    // Pengampu berhalangan (tanpa presensi) supaya penggantian sah.
+    $r = siapkanJurnal(false);
     $piket = siapkanGuruPiket($r);
 
     $id = $this->actingAs($piket['user'])
@@ -368,6 +371,103 @@ it('menandai sesi sudah terisi bagi guru piket setelah diisi guru lain', functio
         ->assertOk()
         ->assertJsonPath('data.sesi.0.status', JurnalService::SUDAH)
         ->assertJsonPath('data.sesi.0.boleh_isi', false);
+});
+
+it('menolak guru piket mengisi sesi pengampu yang sudah presensi masuk', function (): void {
+    $r = siapkanJurnal();
+    $piket = siapkanGuruPiket($r);
+
+    // Daftar sesi sudah menerangkan alasannya, bukan sekadar mengunci tombol.
+    $this->actingAs($piket['user'])
+        ->getJson('/api/v1/jurnal/sesi-hari-ini?tanggal='.seninUji())
+        ->assertOk()
+        ->assertJsonPath('data.sesi.0.status', JurnalService::BELUM)
+        ->assertJsonPath('data.sesi.0.boleh_isi', false)
+        ->assertJsonPath('data.sesi.0.pengampu_hadir', true);
+
+    $this->actingAs($piket['user'])
+        ->postJson('/api/v1/jurnal', badanJurnal($r, $r['siswa']->all()))
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'PENGAMPU_HADIR');
+
+    expect(Jurnal::count())->toBe(0);
+});
+
+it('mengizinkan guru piket menggantikan pengampu yang izin disetujui', function (): void {
+    $r = siapkanJurnal(false);
+    $piket = siapkanGuruPiket($r);
+
+    PengajuanIzin::factory()->disetujui()->create([
+        'pegawai_id' => $r['guru']->id,
+        'jenis' => PengajuanIzin::JENIS_IZIN,
+        'tanggal_mulai' => seninUji(),
+        'tanggal_selesai' => seninUji(),
+    ]);
+
+    $this->actingAs($piket['user'])
+        ->getJson('/api/v1/jurnal/sesi-hari-ini?tanggal='.seninUji())
+        ->assertOk()
+        ->assertJsonPath('data.sesi.0.boleh_isi', true);
+
+    $this->actingAs($piket['user'])
+        ->postJson('/api/v1/jurnal', badanJurnal($r, $r['siswa']->all()))
+        ->assertCreated();
+
+    expect(Jurnal::firstOrFail()->diisi_oleh_pegawai_id)->toBe($piket['pegawai']->id);
+});
+
+it('mengizinkan guru piket menggantikan pengampu dinas luar meski pengampu presensi', function (): void {
+    $r = siapkanJurnal();
+    $piket = siapkanGuruPiket($r);
+
+    PengajuanIzin::factory()->disetujui()->dinas(true)->create([
+        'pegawai_id' => $r['guru']->id,
+        'tanggal_mulai' => seninUji(),
+        'tanggal_selesai' => seninUji(),
+    ]);
+
+    $this->actingAs($piket['user'])
+        ->getJson('/api/v1/jurnal/sesi-hari-ini?tanggal='.seninUji())
+        ->assertOk()
+        ->assertJsonPath('data.sesi.0.boleh_isi', true);
+
+    $this->actingAs($piket['user'])
+        ->postJson('/api/v1/jurnal', badanJurnal($r, $r['siswa']->all()))
+        ->assertCreated();
+});
+
+it('menutup penyuntingan guru piket setelah pengampu presensi masuk', function (): void {
+    $r = siapkanJurnal(false);
+    $piket = siapkanGuruPiket($r);
+
+    $id = $this->actingAs($piket['user'])
+        ->postJson('/api/v1/jurnal', badanJurnal($r, $r['siswa']->all()))
+        ->assertCreated()
+        ->json('data.id');
+
+    // Pengampu akhirnya datang dan presensi: jurnal berpindah tangan.
+    PresensiPegawai::factory()->create([
+        'pegawai_id' => $r['guru']->id,
+        'semester_id' => $r['semester']->id,
+        'tanggal' => seninUji(),
+        'masuk_validasi' => PresensiPegawai::VALID,
+    ]);
+
+    $this->actingAs($piket['user'])
+        ->putJson('/api/v1/jurnal/'.$id, [
+            'materi' => 'Diubah guru piket',
+            'kegiatan' => 'Tidak boleh tersimpan.',
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'PENGAMPU_HADIR');
+
+    // Pengampu sendiri tetap boleh mengubah jurnal kelasnya.
+    $this->actingAs($r['user'])
+        ->putJson('/api/v1/jurnal/'.$id, [
+            'materi' => 'Diubah guru pengampu',
+            'kegiatan' => 'Perbaikan oleh pengampu.',
+        ])
+        ->assertOk();
 });
 
 /* ------------------------------ Data contoh ------------------------------ */
