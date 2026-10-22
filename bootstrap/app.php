@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Exceptions\AturanBisnisException;
 use App\Http\Middleware\AutentikasiTv;
 use App\Http\Middleware\CatatPermintaanApi;
+use App\Http\Middleware\PaksaJsonApi;
 use App\Http\Middleware\PastikanPeran;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -28,6 +29,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'peran' => PastikanPeran::class,
             // BR-32 — token TV hanya berlaku pada endpoint `tv`.
             'tv' => AutentikasiTv::class,
+        ]);
+
+        // 3.4 — seluruh permintaan API dinilai sebagai JSON sejak awal grup,
+        // supaya tamu menerima 401 JSON (bukan pengalihan ke route login).
+        $middleware->api(prepend: [
+            PaksaJsonApi::class,
         ]);
 
         // 9 — pencatatan permintaan API.
