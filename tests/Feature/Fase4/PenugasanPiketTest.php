@@ -470,6 +470,31 @@ it('menutup penyuntingan guru piket setelah pengampu presensi masuk', function (
         ->assertOk();
 });
 
+it('guru piket dapat menyimpan perubahan lewat POST multipart ber-_method PUT', function (): void {
+    $r = siapkanJurnal(false);
+    $piket = siapkanGuruPiket($r);
+
+    $id = $this->actingAs($piket['user'])
+        ->postJson('/api/v1/jurnal', badanJurnal($r, $r['siswa']->all()))
+        ->assertCreated()
+        ->json('data.id');
+
+    // Formulir peramban mengirim multipart sebagai POST + `_method=PUT`, karena
+    // PHP tidak menguraikan multipart pada PUT (badan permintaan jadi kosong dan
+    // validasi "materi wajib diisi" muncul walau formulir terisi).
+    $this->actingAs($piket['user'])
+        ->post('/api/v1/jurnal/'.$id, [
+            '_method' => 'PUT',
+            'materi' => 'Materi diperbaiki guru piket',
+            'kegiatan' => 'Kegiatan diperbaiki guru piket.',
+            'presensi' => [
+                $r['siswa']->first()->id => ['status' => 'H'],
+            ],
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.materi', 'Materi diperbaiki guru piket');
+});
+
 /* ------------------------------ Data contoh ------------------------------ */
 
 it('mengisi contoh penugasan piket untuk hari kerja dan aman diulang', function (): void {
