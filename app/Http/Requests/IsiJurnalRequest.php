@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests;
 
 use App\Models\PresensiSiswa;
+use App\Support\BatasFoto;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -47,7 +48,7 @@ class IsiJurnalRequest extends FormRequest
 
             // A-12 — maksimal 3 foto per jurnal.
             'foto' => ['nullable', 'array', 'max:3'],
-            'foto.*' => ['file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:1024'],
+            'foto.*' => ['file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.BatasFoto::kb()],
 
             // FR-JRN-03 — presensi siswa. Kunci lariknya boleh `siswa_id`, dan boleh
             // juga mengirim `siswa_id` di dalam butirnya; keduanya diterima service.
@@ -88,7 +89,7 @@ class IsiJurnalRequest extends FormRequest
             'foto.*.uploaded' => 'Foto gagal diunggah (melebihi batas server). Perkecil foto lalu coba lagi.',
             'foto.*.image' => 'Berkas foto harus berupa gambar.',
             'foto.*.mimes' => 'Format foto harus JPG, PNG, atau WEBP.',
-            'foto.*.max' => 'Ukuran tiap foto maksimal 1 MB.',
+            'foto.*.max' => BatasFoto::pesan(),
         ];
     }
 }

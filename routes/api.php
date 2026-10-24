@@ -78,6 +78,9 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
         Route::post('/auth/ganti-password', [AuthController::class, 'gantiPassword'])->name('auth.ganti-password');
 
+        // Batas kompresi foto — dibaca klien semua peran sebelum mengunggah.
+        Route::get('/pengaturan/foto', [PengaturanSekolahController::class, 'foto']);
+
         /* ------------------------------------------------ master data — LIHAT */
         // L pada matriks Bagian 2: admin, kepala_sekolah, wakasek_kurikulum.
         Route::middleware('peran:admin,kepala_sekolah,wakasek_kurikulum')->group(function (): void {

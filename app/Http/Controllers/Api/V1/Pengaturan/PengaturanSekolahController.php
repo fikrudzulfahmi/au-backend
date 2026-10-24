@@ -195,6 +195,23 @@ class PengaturanSekolahController extends Controller
         ]);
     }
 
+    /**
+     * Nilai kompresi foto yang berlaku untuk semua pengguna.
+     *
+     * Dipakai klien (jurnal & presensi) agar foto ukuran apa pun dikompres ke
+     * batas yang diatur admin, bukan ke angka tetap di kode.
+     */
+    public function foto(): JsonResponse
+    {
+        return response()->json([
+            'data' => [
+                'max_sisi_px' => (int) $this->pengaturan->ambil('foto_max_sisi_px'),
+                'kualitas_jpeg' => (int) $this->pengaturan->ambil('foto_kualitas_jpeg'),
+                'target_maks_kb' => (int) $this->pengaturan->ambil('foto_target_maks_kb'),
+            ],
+        ]);
+    }
+
     public function simpanSistem(PengaturanSistemRequest $request): JsonResponse
     {
         $data = $request->validated();
