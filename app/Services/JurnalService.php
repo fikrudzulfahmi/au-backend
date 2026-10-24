@@ -301,26 +301,23 @@ class JurnalService
             } elseif ($jurnal !== null) {
                 $status = self::SUDAH;
                 $milikPiket = (int) $jurnal->diisi_oleh_pegawai_id === (int) $guru->id;
-                // Jurnal yang diisi piket tetap miliknya selama pengampu tidak
-                // masuk; begitu pengampu presensi, guru itulah yang berhak.
-                $bolehUbah = $milikPiket && ($izin !== null || ! $hadir);
-                $alasan = match (true) {
-                    $bolehUbah => null,
-                    ! $milikPiket => 'Jurnal diisi oleh guru pengampu.',
-                    default => 'Pengampu sudah presensi masuk — jurnal diubah oleh guru yang bersangkutan.',
-                };
+                // Jurnal yang diisi piket tetap boleh ia sunting sepanjang hari,
+                // meskipun pengampu kemudian presensi masuk: pengampu bisa saja
+                // masuk lalu berhalangan masuk kelas karena kegiatan lain.
+                $bolehUbah = $milikPiket;
+                $alasan = $milikPiket ? null : 'Jurnal diisi oleh guru pengampu.';
             } else {
                 $status = self::BELUM;
 
                 if (! $adaPresensi) {
                     $alasan = 'Lakukan presensi masuk terlebih dahulu';
-                } elseif ($hadir && $izin === null) {
-                    // Pengampu masuk: piket tidak menggantikan, jurnal diisi guru itu.
-                    $alasan = 'Pengampu ('.$s['guru'].') sudah presensi masuk — jurnal diisi oleh guru yang bersangkutan.';
                 } else {
+                    // Pengampu hadir pun tidak menutup hak piket — guru bisa saja
+                    // sudah presensi tetapi tertahan kegiatan lain.
                     $boleh = true;
                     $alasan = match (true) {
                         $izin !== null => 'Pengampu ('.$s['guru'].') '.$izin->labelJenis().' — Anda menggantikan',
+                        $hadir => 'Pengampu ('.$s['guru'].') sudah presensi masuk — Anda menggantikan sebagai guru piket',
                         default => 'Pengampu ('.$s['guru'].') belum presensi masuk (alpa) — Anda menggantikan',
                     };
                 }
@@ -414,40 +411,6 @@ class JurnalService
     public function berhalangan(Pegawai $guru, string $tanggal): ?PengajuanIzin
     {
         return $this->pengajuan->berhalanganPada($guru, $tanggal);
-    }
-
-    /**
-     * Aturan penggantian guru piket (permintaan klien).
-     *
-     * Guru piket menulis jurnal atas nama pengampu hanya bila pengampu TIDAK
-     * masuk: izin, sakit, cuti, dinas luar yang disetujui, atau tanpa presensi
-     * masuk sama sekali (alpa). Begitu pengampu sudah presensi masuk, jurnal
-     * sesi itu milik guru tersebut dan piket tidak boleh membuat maupun
-     * menyuntingnya.
-     *
-     * @return array{boleh: bool, alasan: string}
-     */
-    public function pengampuBolehDigantikan(Pegawai $pengampu, string $tanggal): array
-    {
-        // Pengajuan disetujui (termasuk dinas luar) menang atas presensi: guru
-        // yang berdinas bisa saja tetap presensi dari lokasi dinas, tetapi tidak
-        // berada di kelas sehingga sesinya perlu digantikan.
-        $izin = $this->berhalangan($pengampu, $tanggal);
-
-        if ($izin !== null) {
-            return ['boleh' => true, 'alasan' => 'Pengampu '.$izin->labelJenis().' disetujui.'];
-        }
-
-        if ($this->presensiMasukMemenuhi($pengampu, $tanggal)) {
-            return [
-                'boleh' => false,
-                'alasan' => 'Pengampu sudah presensi masuk — jurnal diisi oleh guru yang bersangkutan.',
-            ];
-        }
-
-        // Tanpa presensi masuk dan tanpa pengajuan: dihitung alpa, sehingga
-        // kelasnya perlu dijurnal oleh guru piket.
-        return ['boleh' => true, 'alasan' => 'Pengampu belum presensi masuk (alpa).'];
     }
 
     /**
@@ -658,69 +621,16 @@ class JurnalService
             );
         }
 
-        // Guru piket hanya menggantikan pengampu yang tidak masuk. Bila pengampu
-        // sudah presensi masuk, sesi itu bukan milik piket — baik untuk membuat
-        // maupun menyunting jurnalnya.
-        $pengampuId = (int) ($sesi['pegawai_id'] ?? $guru->id);
-
-        if ($pengampuId !== (int) $guru->id) {
-            $pengampu = Pegawai::query()->find($pengampuId);
-            $cek = $pengampu instanceof Pegawai
-                ? $this->pengampuBolehDigantikan($pengampu, $tanggal)
-                : ['boleh' => false, 'alasan' => 'Guru pengampu sesi ini tidak ditemukan.'];
-
-            if (! $cek['boleh']) {
-                throw AturanBisnisException::tolak($cek['alasan'], 'plotting_mapel_id', 'PENGAMPU_HADIR');
-            }
-        }
-
+        // Guru piket hari itu boleh mengisi sesi kelas lain kapan saja — termasuk
+        // ketika pengampu sudah presensi masuk tetapi berhalangan masuk kelas
+        // karena kegiatan lain. Izin/alpa pengampu hanya memengaruhi keterangan
+        // yang ditampilkan, bukan hak mengisi.
         return $sesi;
-    }
-
-    /**
-     * Guru piket hanya menyunting jurnal pengganti selama pengampu sesi itu
-     * masih tidak masuk.
-     *
-     * Begitu pengampu presensi masuk, jurnal sesi tersebut menjadi milik guru
-     * yang bersangkutan — piket tidak lagi boleh mengubahnya, meskipun jurnal
-     * itu awalnya ia isi sendiri.
-     */
-    private function pastikanPengampuMasihTidakMasuk(User $user, Jurnal $jurnal): void
-    {
-        $pegawai = $user->pegawai;
-
-        if (! $pegawai instanceof Pegawai) {
-            return;
-        }
-
-        // Hanya jurnal hasil penggantian oleh pengguna ini; jurnal milik sendiri
-        // dan jurnal guru lain (ditolak controller) tidak diatur di sini.
-        if ((int) $jurnal->diisi_oleh_pegawai_id !== (int) $pegawai->id) {
-            return;
-        }
-
-        $pengampu = $jurnal->pegawai;
-
-        if (! $pengampu instanceof Pegawai) {
-            return;
-        }
-
-        $tanggal = CarbonImmutable::parse($jurnal->tanggal)->toDateString();
-
-        if (! $this->pengampuBolehDigantikan($pengampu, $tanggal)['boleh']) {
-            throw new AturanBisnisException(
-                'Guru pengampu sudah presensi masuk, sehingga jurnal ini hanya dapat diubah oleh guru yang bersangkutan.',
-                'PENGAMPU_HADIR',
-                422,
-            );
-        }
     }
 
     /** BR-20 / FR-JRN-05 — edit tanpa batas waktu oleh pemilik, selalu dicatat. */
     public function perbarui(User $user, Jurnal $jurnal, array $data, ?array $fotoBaru = null): Jurnal
     {
-        $this->pastikanPengampuMasihTidakMasuk($user, $jurnal);
-
         $lama = [
             'materi' => $jurnal->materi,
             'kegiatan' => $jurnal->kegiatan,
