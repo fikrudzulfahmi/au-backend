@@ -75,14 +75,20 @@ class PengaturanSekolahController extends Controller
                     continue;
                 }
 
+                // Nama berkas dibuat unik per unggahan. Sebelumnya nama berkas
+                // dipatok per kolom (sekolah/logo_kiri_path.jpg), sehingga
+                // menghapus berkas lama tepat setelah menulis menghapus berkas
+                // baru di path yang sama — logo/favicon hilang setelah refresh.
                 $pathBaru = $this->berkas->simpanGambarTerkompres(
                     $request->file($input),
                     'sekolah',
                     $input === 'favicon' ? 64 : 800,
-                    $kolom
                 );
 
-                $this->berkas->hapus($sekolah->{$kolom});
+                if ($sekolah->{$kolom} !== $pathBaru) {
+                    $this->berkas->hapus($sekolah->{$kolom});
+                }
+
                 $data[$kolom] = $pathBaru;
             }
 

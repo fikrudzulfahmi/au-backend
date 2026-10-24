@@ -124,12 +124,20 @@ class PengumumanController extends Controller
             return $data;
         }
 
-        $data['gambar_path'] = $this->berkas->simpanGambarTerkompres(
+        // Nama unik per unggahan; `$kolomLama` adalah PATH berkas lama, bukan
+        // nama berkas — memakainya sebagai nama membuat berkas baru menumpuk di
+        // subfolder bersarang (pengumuman/pengumuman/...).
+        $pathBaru = $this->berkas->simpanGambarTerkompres(
             $request->file('gambar'),
             'pengumuman',
             800,
-            $kolomLama,
         );
+
+        if ($kolomLama !== null && $kolomLama !== $pathBaru) {
+            $this->berkas->hapus($kolomLama);
+        }
+
+        $data['gambar_path'] = $pathBaru;
 
         return $data;
     }

@@ -249,3 +249,27 @@ it('mengganti versi URL logo agar cache peramban gugur saat logo diganti', funct
         ->and($baru)->toContain('?v=')
         ->and($baru)->not->toBe($awal);
 });
+
+it('tetap menyimpan berkas logo saat admin mengunggah ulang (FR-SCH-04)', function (): void {
+    Storage::fake('local');
+    $admin = sebagaiAdmin();
+
+    $kirim = fn (): mixed => $this->actingAs($admin)->postJson('/api/v1/pengaturan/sekolah', [
+        'nama_sekolah' => 'SMK Contoh',
+        'nama_kepala_sekolah' => 'Bapak Contoh',
+        'npsn' => '20512345',
+        'logo_kiri' => UploadedFile::fake()->image('logo.png', 400, 400),
+        'favicon' => UploadedFile::fake()->image('ikon.png', 128, 128),
+    ]);
+
+    $kirim()->assertOk();
+    $kirim()->assertOk();
+
+    $sekolah = ProfilSekolah::first();
+    $path = (string) $sekolah?->logo_kiri_path;
+
+    // Regresi: unggahan kedua menghapus berkas yang baru ditulis karena nama
+    // berkas dipatok per kolom, sehingga logo hilang setelah halaman dimuat ulang.
+    expect(Storage::disk('local')->exists($path))->toBeTrue()
+        ->and(Storage::disk('local')->exists((string) $sekolah?->favicon_path))->toBeTrue();
+});
