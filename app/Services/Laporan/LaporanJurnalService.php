@@ -88,7 +88,7 @@ final class LaporanJurnalService
     public function daftarJurnal(Semester $semester, PeriodeLaporan $periode, array $filter = []): array
     {
         $jurnal = Jurnal::query()
-            ->with(['kelas:id,nama', 'pegawai:id,nip,nama', 'plottingMapel.mapel:id,kode,nama'])
+            ->with(['kelas:id,nama', 'pegawai:id,nip,nama', 'diisiOleh:id,nama', 'plottingMapel.mapel:id,kode,nama'])
             ->withCount([
                 'presensiSiswa as jumlah_hadir' => fn ($q) => $q->where('status', PresensiSiswa::HADIR),
                 'presensiSiswa as jumlah_sakit' => fn ($q) => $q->where('status', PresensiSiswa::SAKIT),
@@ -116,6 +116,11 @@ final class LaporanJurnalService
             'mapel' => $j->plottingMapel?->mapel?->nama,
             'guru' => $j->pegawai?->nama,
             'nip' => $j->pegawai?->nip,
+            // Guru piket yang mengisi sesi milik guru lain; null bila diisi pengampu sendiri.
+            'diisi_oleh' => $j->diisiOleh?->nama,
+            'guru_keterangan' => $j->diisiOleh?->nama === null
+                ? $j->pegawai?->nama
+                : sprintf('%s (diisi guru piket: %s)', $j->pegawai?->nama, $j->diisiOleh->nama),
             'materi' => $j->materi,
             'kegiatan' => $j->kegiatan,
             'hadir' => (int) $j->jumlah_hadir,
@@ -132,7 +137,7 @@ final class LaporanJurnalService
             'periode' => $periode->label,
             'kolom' => ['Tanggal', 'Jam Ke', 'Kelas', 'Mapel', 'Guru', 'Materi', 'Kegiatan', 'H', 'S', 'I', 'A', 'B', 'T'],
             'baris' => array_map(fn (array $b): array => [
-                $b['tanggal'], $b['label_jam'], $b['kelas'], $b['mapel'], $b['guru'],
+                $b['tanggal'], $b['label_jam'], $b['kelas'], $b['mapel'], $b['guru_keterangan'],
                 $b['materi'], $b['kegiatan'], $b['hadir'], $b['sakit'], $b['izin'], $b['alpa'],
                 $b['bolos'], $b['terlambat'],
             ], $baris),

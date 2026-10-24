@@ -312,3 +312,50 @@ it('FR-LAP-09 menghitung jumlah JP terlaksana dari sesi jurnal', function () {
     expect($baris['jumlah_sesi'])->toBe(1)
         ->and($baris['jumlah_jp'])->toBe(3);
 });
+
+/** FR-LAP-07 — kolom Guru menyebut guru piket yang mengisi sesi guru pengampu. */
+it('FR-LAP-07 menampilkan guru piket yang mengisi jurnal pada kolom Guru', function (): void {
+    $this->travelTo(CarbonImmutable::parse(seninUji().' 09:00:00'));
+
+    $r = siapkanJurnal(jamKe: [1, 2, 3]);
+
+    /** @var Pegawai $piket */
+    $piket = Pegawai::factory()->create(['nama' => 'Budi Piket']);
+
+    // Jurnal milik guru pengampu tetapi diisi guru piket: kolom Guru harus memuat keduanya.
+    Jurnal::factory()
+        ->denganPlotting($r['plotting'])
+        ->jamKe(1, 3)
+        ->padaTanggal(seninUji())
+        ->create([
+            'pegawai_id' => $r['guru']->id,
+            'diisi_oleh_pegawai_id' => $piket->id,
+        ]);
+
+    $res = $this->actingAs(sebagaiAdmin())->getJson('/api/v1/laporan/jurnal/daftar?periode=hari_ini');
+    $res->assertOk();
+
+    $guruPengampu = (string) $r['guru']->nama;
+
+    expect($res->json('data.baris.0.4'))->toBe("{$guruPengampu} (diisi guru piket: Budi Piket)")
+        ->and($res->json('data.jurnal.0.diisi_oleh'))->toBe('Budi Piket')
+        ->and($res->json('data.jurnal.0.guru_keterangan'))->toBe("{$guruPengampu} (diisi guru piket: Budi Piket)");
+});
+
+it('FR-LAP-07 membiarkan kolom Guru apa adanya bila diisi pengampu sendiri', function (): void {
+    $this->travelTo(CarbonImmutable::parse(seninUji().' 09:00:00'));
+
+    $r = siapkanJurnal(jamKe: [1, 2, 3]);
+
+    Jurnal::factory()
+        ->denganPlotting($r['plotting'])
+        ->jamKe(1, 3)
+        ->padaTanggal(seninUji())
+        ->create(['pegawai_id' => $r['guru']->id, 'diisi_oleh_pegawai_id' => null]);
+
+    $res = $this->actingAs(sebagaiAdmin())->getJson('/api/v1/laporan/jurnal/daftar?periode=hari_ini');
+    $res->assertOk();
+
+    expect($res->json('data.baris.0.4'))->toBe((string) $r['guru']->nama)
+        ->and($res->json('data.jurnal.0.diisi_oleh'))->toBeNull();
+});
