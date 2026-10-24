@@ -719,8 +719,14 @@ class JurnalService
             return;
         }
 
-        // Ganti utuh agar edit tidak meninggalkan baris lama yang sudah tidak dikirim.
-        PresensiSiswa::query()->where('jurnal_id', $jurnal->id)->delete();
+        // Hapus hanya baris yang dikirim ulang. Menghapus seluruh baris jurnal akan
+        // melenyapkan catatan siswa yang sudah tidak lagi terdaftar di kelas itu
+        // (pindah/tinggal kelas) setiap kali guru menyunting jurnal lama.
+        PresensiSiswa::query()
+            ->where('jurnal_id', $jurnal->id)
+            ->whereIn('siswa_id', array_column($baris, 'siswa_id'))
+            ->delete();
+
         PresensiSiswa::query()->insert($baris);
     }
 

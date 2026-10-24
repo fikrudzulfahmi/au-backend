@@ -222,7 +222,7 @@ it('memisahkan hitungan B dari A pada ringkasan riwayat', function () {
         ->assertJsonPath('data.0.ringkasan.B', 2);
 });
 
-it('mengganti presensi siswa secara utuh saat jurnal diubah', function () {
+it('menyunting presensi tanpa menghapus siswa yang tidak dikirim', function () {
     $r = siapkanJurnal();
     $s = $r['siswa'];
 
@@ -244,8 +244,11 @@ it('mengganti presensi siswa secara utuh saat jurnal diubah', function () {
 
     $jurnal = Jurnal::find($id);
 
-    expect($jurnal->presensiSiswa()->count())->toBe(2)
-        ->and($jurnal->presensiSiswa()->where('status', PresensiSiswa::ALPA)->count())->toBe(1);
+    // Dua siswa yang tidak dikirim tetap hadir — penyuntingan tidak menghapus
+    // catatan mereka (mis. siswa yang sudah keluar dari kelas tidak bisa dikirim ulang).
+    expect($jurnal->presensiSiswa()->count())->toBe(4)
+        ->and($jurnal->presensiSiswa()->where('status', PresensiSiswa::ALPA)->count())->toBe(1)
+        ->and($jurnal->presensiSiswa()->where('status', PresensiSiswa::HADIR)->count())->toBe(3);
 });
 
 it('menghitung ringkasan H S I A pada daftar riwayat', function () {
