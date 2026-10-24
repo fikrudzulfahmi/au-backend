@@ -199,6 +199,11 @@ final class LaporanJurnalService
         $baris = [];
         $belumTerisi = [];
 
+        // Cache penanda libur per tanggal: satu kueri per hari, bukan per guru.
+        // BR-26/KP-5.4 — hari libur tidak punya kewajiban jurnal, jadi sesi
+        // terjadwal di hari itu tidak boleh menambah penyebut kepatuhan.
+        $liburPerHari = [];
+
         foreach ($guru as $orang) {
             $perHari = $jadwal->get($orang->getKey(), collect());
             $izinGuru = $izin->get($orang->getKey()) ?? collect();
@@ -214,6 +219,16 @@ final class LaporanJurnalService
                 }
 
                 if (! $this->jamKerja->hariKerja($orang->jenis_pegawai, $t)) {
+                    continue;
+                }
+
+                $kunciHari = $t->toDateString();
+
+                if (! array_key_exists($kunciHari, $liburPerHari)) {
+                    $liburPerHari[$kunciHari] = $this->jurnal->liburPada($semester, $kunciHari);
+                }
+
+                if ($liburPerHari[$kunciHari] !== null) {
                     continue;
                 }
 
