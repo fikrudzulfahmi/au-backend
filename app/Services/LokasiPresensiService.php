@@ -63,7 +63,9 @@ final class LokasiPresensiService
                 // lokasi aktif lain, agar tidak ada kondisi tanpa default.
                 $target->is_default = (bool) $target->getOriginal('is_default');
             } else {
-                $target->is_default = false;
+                // Lokasi pertama otomatis menjadi default: tanpa default, pegawai tanpa
+                // penetapan khusus tidak punya zona sah sama sekali (BR-12).
+                $target->is_default = ! LokasiPresensi::query()->where('is_default', true)->exists();
             }
 
             $target->save();

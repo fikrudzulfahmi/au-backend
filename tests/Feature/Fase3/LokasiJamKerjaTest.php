@@ -33,6 +33,32 @@ it('membuat lokasi presensi melalui API (FR-LOK-01)', function (): void {
         ->and(LokasiPresensi::firstOrFail()->is_default)->toBeTrue();
 });
 
+it('menjadikan lokasi pertama sebagai default otomatis (BR-12)', function (): void {
+    $admin = sebagaiAdmin();
+
+    // Tanpa default, pegawai tanpa penetapan khusus tidak punya zona presensi sah sama sekali.
+    $this->actingAs($admin)->postJson('/api/v1/pengaturan/lokasi', [
+        'nama' => 'Gedung Utama',
+        'latitude' => -7.8654,
+        'longitude' => 111.465,
+        'radius_m' => 200,
+    ])->assertCreated();
+
+    $this->actingAs($admin)->postJson('/api/v1/pengaturan/lokasi', [
+        'nama' => 'Lab Komputer',
+        'latitude' => -7.8660,
+        'longitude' => 111.4660,
+        'radius_m' => 100,
+    ])->assertCreated();
+
+    $pertama = LokasiPresensi::where('nama', 'Gedung Utama')->firstOrFail();
+    $kedua = LokasiPresensi::where('nama', 'Lab Komputer')->firstOrFail();
+
+    expect($pertama->is_default)->toBeTrue()
+        ->and($kedua->is_default)->toBeFalse()
+        ->and(LokasiPresensi::where('is_default', true)->count())->toBe(1);
+});
+
 it('menolak radius di luar rentang wajar', function (): void {
     $admin = sebagaiAdmin();
 
