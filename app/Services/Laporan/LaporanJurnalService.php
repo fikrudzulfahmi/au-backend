@@ -434,9 +434,10 @@ final class LaporanJurnalService
         // Kunci unik sesi = plotting mapel + jam ke mulai (BR-21), jadi cukup
         // tanpa pegawai_id.
         $sudah = Jurnal::query()
+            ->with('diisiOleh:id,nama')
             ->where('semester_id', $semester->id)
             ->whereDate('tanggal', $tanggal)
-            ->get(['id', 'plotting_mapel_id', 'jam_ke_mulai', 'materi'])
+            ->get(['id', 'plotting_mapel_id', 'jam_ke_mulai', 'materi', 'diisi_oleh_pegawai_id'])
             ->keyBy(fn (Jurnal $j): string => $j->plotting_mapel_id.':'.$j->jam_ke_mulai);
 
         // Rentang tanggal dibandingkan sebagai TANGGAL, bukan string: kolomnya
@@ -551,6 +552,10 @@ final class LaporanJurnalService
                     'guru_id' => (int) $guruId,
                     'nip' => $guru?->nip,
                     'guru' => $guru?->nama,
+                    'diisi_oleh' => $jurnal?->diisiOleh?->nama,
+                    'guru_keterangan' => $jurnal?->diisiOleh?->nama === null
+                        ? $guru?->nama
+                        : sprintf('%s (diisi guru piket: %s)', $guru?->nama, $jurnal->diisiOleh->nama),
                     'jurnal_id' => $jurnal?->id,
                     'materi' => $jurnal?->materi,
                     'status' => $status,
@@ -604,7 +609,7 @@ final class LaporanJurnalService
                     $k['nama'],
                     $s['label_jam'],
                     $s['mapel'],
-                    $s['guru'],
+                    $s['guru_keterangan'],
                     $labelStatus[$s['status']] ?? $s['status'],
                     $s['alasan'] ?? $s['materi'] ?? '-',
                 ];
