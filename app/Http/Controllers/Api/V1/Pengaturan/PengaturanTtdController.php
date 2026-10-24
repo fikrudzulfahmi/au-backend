@@ -13,6 +13,7 @@ use App\Models\ProfilSekolah;
 use App\Services\AuditLogService;
 use App\Services\Laporan\DokumenResmiService;
 use App\Support\PeriodeLaporan;
+use App\Support\UrlBerkasSekolah;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -48,8 +49,12 @@ final class PengaturanTtdController extends Controller
                     'kontak' => collect([$sekolah?->telepon, $sekolah?->email, $sekolah?->website])->filter()->implode(' | '),
                     'tampilkan_logo_kiri' => (bool) ($sekolah?->kop_tampilkan_logo_kiri ?? false),
                     'tampilkan_logo_kanan' => (bool) ($sekolah?->kop_tampilkan_logo_kanan ?? false),
-                    'ada_logo_kiri' => $sekolah?->logo_kiri_path !== null,
-                    'ada_logo_kanan' => $sekolah?->logo_kanan_path !== null,
+                    // URL dipakai halaman Pengaturan untuk menampilkan logo yang
+                    // sedang dipakai kop, bukan sekadar penanda ada/tidak ada.
+                    'ada_logo_kiri' => UrlBerkasSekolah::url('logo-kiri', $sekolah?->logo_kiri_path) !== null,
+                    'ada_logo_kanan' => UrlBerkasSekolah::url('logo-kanan', $sekolah?->logo_kanan_path) !== null,
+                    'logo_kiri_url' => UrlBerkasSekolah::url('logo-kiri', $sekolah?->logo_kiri_path),
+                    'logo_kanan_url' => UrlBerkasSekolah::url('logo-kanan', $sekolah?->logo_kanan_path),
                 ],
                 'tanda_tangan' => $this->tata(),
                 'penandatangan' => PenandatanganResource::collection(

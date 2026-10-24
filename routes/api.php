@@ -37,6 +37,7 @@ use App\Http\Controllers\Api\V1\PublikSekolahController;
 use App\Http\Controllers\Api\V1\Tv\PengaturanTvController;
 use App\Http\Controllers\Api\V1\Tv\TvController;
 use App\Http\Controllers\Api\V1\WaktuServerController;
+use App\Support\UrlBerkasSekolah;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -55,6 +56,11 @@ Route::prefix('v1')->group(function (): void {
     /* ---------------------------------------------------------------- publik */
     Route::get('/waktu-server', [WaktuServerController::class, 'show'])->name('waktu-server');
     Route::get('/publik/sekolah', [PublikSekolahController::class, 'show'])->name('publik.sekolah');
+    // FR-SCH-02 — logo/favicon/foto sampul: dipakai landing page & favicon peramban
+    // yang tidak membawa token; berkas aslinya ada di disk privat.
+    Route::get('/publik/sekolah/berkas/{jenis}', [PublikSekolahController::class, 'berkas'])
+        ->whereIn('jenis', array_keys(UrlBerkasSekolah::JENIS))
+        ->name('publik.sekolah.berkas');
     // FR-LND-05/09 — pengumuman bertanda `tampil_landing` (BR-34). Tanpa login.
     Route::get('/publik/pengumuman', [PublikPengumumanController::class, 'index'])->name('publik.pengumuman');
 

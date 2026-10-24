@@ -192,3 +192,60 @@ it('menyimpan pengaturan teknis presensi (FR-LOK-05)', function (): void {
         ->assertJsonPath('data.gps_max_akurasi_m', 35)
         ->assertJsonPath('data.foto_target_maks_kb', 120);
 });
+
+it('mengembalikan URL logo & favicon yang bisa diakses tanpa login (FR-SCH-02)', function (): void {
+    Storage::fake('local');
+    $admin = sebagaiAdmin();
+
+    $this->actingAs($admin)->postJson('/api/v1/pengaturan/sekolah', [
+        'nama_sekolah' => 'SMK Contoh',
+        'nama_kepala_sekolah' => 'Bapak Contoh',
+        'npsn' => '20512345',
+        'logo_kiri' => UploadedFile::fake()->image('logo.png', 400, 400),
+        'favicon' => UploadedFile::fake()->image('ikon.png', 128, 128),
+    ])->assertOk();
+
+    $data = $this->getJson('/api/v1/publik/sekolah')->assertOk()->json('data');
+
+    // Sebelumnya resource mengembalikan null, sehingga logo "hilang" setiap
+    // halaman dimuat ulang walau berkasnya sudah tersimpan.
+    expect($data['logo_kiri_url'])->toContain('/api/v1/publik/sekolah/berkas/logo-kiri')
+        ->and($data['favicon_url'])->toContain('/api/v1/publik/sekolah/berkas/favicon')
+        ->and($data['logo_kanan_url'])->toBeNull();
+
+    foreach (['logo-kiri', 'favicon'] as $jenis) {
+        $respons = $this->get('/api/v1/publik/sekolah/berkas/'.$jenis);
+        $respons->assertOk()->assertHeader('content-type', 'image/jpeg');
+    }
+});
+
+it('menyajikan 404 untuk berkas sekolah yang belum diunggah', function (): void {
+    Storage::fake('local');
+    sebagaiAdmin();
+
+    $this->get('/api/v1/publik/sekolah/berkas/favicon')->assertNotFound();
+});
+
+it('mengganti versi URL logo agar cache peramban gugur saat logo diganti', function (): void {
+    Storage::fake('local');
+    $admin = sebagaiAdmin();
+
+    $this->actingAs($admin)->postJson('/api/v1/pengaturan/sekolah', [
+        'nama_sekolah' => 'SMK Contoh',
+        'nama_kepala_sekolah' => 'Bapak Contoh',
+        'npsn' => '20512345',
+        'logo_kiri' => UploadedFile::fake()->image('logo.png', 400, 400),
+    ])->assertOk();
+
+    $awal = $this->getJson('/api/v1/publik/sekolah')->json('data.logo_kiri_url');
+    $path = (string) ProfilSekolah::first()?->logo_kiri_path;
+
+    // Meniru unggahan berikutnya: berkas yang sama ditimpa pada detik berbeda.
+    touch(Storage::disk('local')->path($path), time() + 10);
+
+    $baru = $this->getJson('/api/v1/publik/sekolah')->json('data.logo_kiri_url');
+
+    expect($awal)->toContain('?v=')
+        ->and($baru)->toContain('?v=')
+        ->and($baru)->not->toBe($awal);
+});

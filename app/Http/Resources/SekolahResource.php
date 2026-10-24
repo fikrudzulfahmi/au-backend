@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources;
 
 use App\Services\PengaturanService;
+use App\Support\UrlBerkasSekolah;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -50,10 +51,12 @@ class SekolahResource extends JsonResource
                 'x' => $media['x'] ?? null,
                 'whatsapp' => $media['whatsapp'] ?? null,
             ],
-            'logo_kiri_url' => null,
-            'logo_kanan_url' => null,
-            'favicon_url' => null,
-            'hero_foto_url' => null,
+            // FR-SCH-02 — URL nyata (bukan null) supaya pratinjau logo/favicon
+            // tetap tampil setelah halaman dimuat ulang.
+            'logo_kiri_url' => UrlBerkasSekolah::url('logo-kiri', $this->logo_kiri_path),
+            'logo_kanan_url' => UrlBerkasSekolah::url('logo-kanan', $this->logo_kanan_path),
+            'favicon_url' => UrlBerkasSekolah::url('favicon', $this->favicon_path),
+            'hero_foto_url' => UrlBerkasSekolah::url('hero', $this->hero_foto_path),
             'alamat_lengkap' => $this->alamatLengkap(),
             'koordinat' => $this->latitude !== null && $this->longitude !== null
                 ? ['latitude' => (float) $this->latitude, 'longitude' => (float) $this->longitude]
