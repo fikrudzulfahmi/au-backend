@@ -19,6 +19,7 @@ class LokasiPresensiResource extends JsonResource
             'latitude' => (float) $this->latitude,
             'longitude' => (float) $this->longitude,
             'radius_m' => (int) $this->radius_m,
+            'poligon' => $this->poligon,
             'is_default' => (bool) $this->is_default,
             'is_active' => (bool) $this->is_active,
             'jumlah_pegawai' => $this->whenCounted('pegawai'),

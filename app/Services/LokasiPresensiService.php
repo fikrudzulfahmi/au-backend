@@ -9,6 +9,7 @@ use App\Models\LokasiPresensi;
 use App\Models\Pegawai;
 use App\Models\PegawaiLokasi;
 use App\Models\User;
+use App\Support\Poligon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -37,13 +38,20 @@ final class LokasiPresensiService
 
             $target = $lokasi ?? new LokasiPresensi;
 
-            $target->fill([
+            $isi = [
                 'nama' => $data['nama'],
                 'latitude' => (float) $data['latitude'],
                 'longitude' => (float) $data['longitude'],
                 'radius_m' => (int) $data['radius_m'],
                 'is_active' => (bool) ($data['is_active'] ?? true),
-            ]);
+            ];
+
+            // Zona poligon disimpan bila disertakan; null bila dikosongkan.
+            if (array_key_exists('poligon', $data)) {
+                $isi['poligon'] = $data['poligon'] !== null ? Poligon::normalisasi($data['poligon']) : null;
+            }
+
+            $target->fill($isi);
 
             // BR-12 — jangan biarkan dua lokasi default. Lokasi default lama dilepas
             // lebih dahulu karena MySQL memeriksa indeks unik secara langsung.

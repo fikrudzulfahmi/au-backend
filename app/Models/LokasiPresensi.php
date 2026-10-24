@@ -24,7 +24,7 @@ class LokasiPresensi extends Model
     protected $table = 'lokasi_presensi';
 
     protected $fillable = [
-        'nama', 'latitude', 'longitude', 'radius_m', 'is_default', 'is_active', 'penanda_default',
+        'nama', 'latitude', 'longitude', 'radius_m', 'poligon', 'is_default', 'is_active', 'penanda_default',
     ];
 
     protected function casts(): array
@@ -33,6 +33,7 @@ class LokasiPresensi extends Model
             'latitude' => 'float',
             'longitude' => 'float',
             'radius_m' => 'integer',
+            'poligon' => 'array',
             'is_default' => 'boolean',
             'is_active' => 'boolean',
         ];

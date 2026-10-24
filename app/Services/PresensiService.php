@@ -7,12 +7,14 @@ namespace App\Services;
 use App\Exceptions\AturanBisnisException;
 use App\Models\HariLibur;
 use App\Models\JamKerja;
+use App\Models\LokasiPresensi;
 use App\Models\Pegawai;
 use App\Models\PengajuanIzin;
 use App\Models\PengajuanLuarRadius;
 use App\Models\PresensiPegawai;
 use App\Models\Semester;
 use App\Models\User;
+use App\Support\Poligon;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
@@ -455,15 +457,31 @@ final class PresensiService
     private function nilaiRadius(Pegawai $pegawai, float $lat, float $lng, string $tanggal, ?string $alasan): array
     {
         $lokasiEfektif = $this->lokasi->lokasiEfektif($pegawai);
-        $terdekat = $this->lokasi->terdekat($lokasiEfektif, $lat, $lng);
+        $jarakTerdekat = $this->lokasi->terdekat($lokasiEfektif, $lat, $lng)['jarak_m'];
 
-        // BR-11 — sah bila berada di dalam radius salah satu lokasi pegawai.
-        if ($terdekat['lokasi'] !== null && $terdekat['jarak_m'] !== null
-            && $terdekat['jarak_m'] <= (float) $terdekat['lokasi']->radius_m) {
+        // Zona poligon diperiksa untuk SEMUA lokasi pegawai: lokasi yang pusatnya paling
+        // dekat belum tentu arealnya yang memuat titik ini, sedangkan bentuk area sekolah
+        // tidak selalu mendekati lingkaran.
+        $lokasiSah = $lokasiEfektif->first(
+            fn (LokasiPresensi $l): bool => Poligon::sah($l->poligon) && Poligon::memuat($l->poligon, $lat, $lng)
+        );
+
+        if ($lokasiSah === null) {
+            // BR-11 — lokasi tanpa zona poligon tetap dinilai dengan radius Haversine.
+            $tanpaPoligon = $lokasiEfektif->reject(fn (LokasiPresensi $l): bool => Poligon::sah($l->poligon));
+            $radius = $this->lokasi->terdekat($tanpaPoligon, $lat, $lng);
+
+            if ($radius['lokasi'] !== null && $radius['jarak_m'] !== null
+                && $radius['jarak_m'] <= (float) $radius['lokasi']->radius_m) {
+                $lokasiSah = $radius['lokasi'];
+            }
+        }
+
+        if ($lokasiSah !== null) {
             return [
                 'validasi' => PresensiPegawai::VALID,
-                'lokasi_id' => $terdekat['lokasi']->getKey(),
-                'jarak_m' => $terdekat['jarak_m'],
+                'lokasi_id' => $lokasiSah->getKey(),
+                'jarak_m' => $jarakTerdekat,
                 'pengajuan_id' => null,
             ];
         }
@@ -475,7 +493,7 @@ final class PresensiService
             return [
                 'validasi' => PresensiPegawai::DISETUJUI,
                 'lokasi_id' => null,
-                'jarak_m' => $terdekat['jarak_m'],
+                'jarak_m' => $jarakTerdekat,
                 'pengajuan_id' => $pengajuan->getKey(),
             ];
         }
@@ -492,7 +510,7 @@ final class PresensiService
         return [
             'validasi' => PresensiPegawai::MENUNGGU,
             'lokasi_id' => null,
-            'jarak_m' => $terdekat['jarak_m'],
+            'jarak_m' => $jarakTerdekat,
             'pengajuan_id' => null,
         ];
     }
