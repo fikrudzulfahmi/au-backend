@@ -3,9 +3,12 @@
 declare(strict_types=1);
 
 use App\Models\Jurnal;
+use App\Models\JurnalFoto;
 use App\Models\Kelas;
 use App\Models\Pegawai;
+use App\Models\PresensiSiswa;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
 
 /*
@@ -358,4 +361,114 @@ it('FR-LAP-07 membiarkan kolom Guru apa adanya bila diisi pengampu sendiri', fun
 
     expect($res->json('data.baris.0.4'))->toBe((string) $r['guru']->nama)
         ->and($res->json('data.jurnal.0.diisi_oleh'))->toBeNull();
+});
+
+// =====================================================================
+// FR-LAP-07 — detail read-only satu jurnal untuk admin & kepala sekolah
+// =====================================================================
+
+/** Menyiapkan satu jurnal Senin lengkap dengan presensi siswa dan satu foto. */
+function jurnalUntukDetail(): array
+{
+    $r = siapkanJurnal(jamKe: [1, 2, 3]);
+
+    /** @var Jurnal $jurnal */
+    $jurnal = Jurnal::factory()
+        ->denganPlotting($r['plotting'])
+        ->jamKe(1, 3)
+        ->padaTanggal(seninUji())
+        ->create([
+            'pegawai_id' => $r['guru']->id,
+            'materi' => 'Struktur algoritma',
+            'kegiatan' => 'Latihan pseudocode',
+            'catatan' => 'Kelas kondusif',
+        ]);
+
+    $jurnal->presensiSiswa()->create([
+        'siswa_id' => $r['siswa'][0]->id,
+        'status' => PresensiSiswa::HADIR,
+    ]);
+    $jurnal->presensiSiswa()->create([
+        'siswa_id' => $r['siswa'][1]->id,
+        'status' => PresensiSiswa::SAKIT,
+        'keterangan' => 'Demam',
+    ]);
+
+    Storage::fake('local');
+    Storage::disk('local')->put('jurnal/uji/detail.jpg', 'isi-foto');
+    JurnalFoto::factory()->create([
+        'jurnal_id' => $jurnal->id,
+        'foto_path' => 'jurnal/uji/detail.jpg',
+        'urutan' => 1,
+    ]);
+
+    return ['rangkaian' => $r, 'jurnal' => $jurnal];
+}
+
+it('FR-LAP-07 membuka detail jurnal beserta presensi siswa untuk kepala sekolah', function (): void {
+    $this->travelTo(CarbonImmutable::parse(seninUji().' 09:00:00'));
+    ['rangkaian' => $r, 'jurnal' => $jurnal] = jurnalUntukDetail();
+
+    $res = $this->actingAs(sebagaiKepsek())->getJson('/api/v1/laporan/jurnal/'.$jurnal->id);
+    $res->assertOk();
+
+    expect($res->json('data.materi'))->toBe('Struktur algoritma')
+        ->and($res->json('data.kegiatan'))->toBe('Latihan pseudocode')
+        ->and($res->json('data.guru'))->toBe((string) $r['guru']->nama)
+        ->and($res->json('data.kelas'))->toBe((string) $r['kelas']->nama)
+        ->and($res->json('data.ringkasan.H'))->toBe(1)
+        ->and($res->json('data.ringkasan.S'))->toBe(1)
+        ->and($res->json('data.presensi_siswa'))->toHaveCount(2)
+        ->and($res->json('data.foto.0.url'))->toContain('/api/v1/laporan/jurnal/'.$jurnal->id.'/foto/');
+
+    // Berkas foto juga boleh dibuka kepala sekolah lewat rute laporan.
+    $fotoId = (int) $res->json('data.foto.0.id');
+    $this->actingAs(sebagaiKepsek())
+        ->get('/api/v1/laporan/jurnal/'.$jurnal->id.'/foto/'.$fotoId)
+        ->assertOk();
+
+    // Admin juga boleh.
+    $this->actingAs(sebagaiAdmin())
+        ->getJson('/api/v1/laporan/jurnal/'.$jurnal->id)
+        ->assertOk();
+});
+
+it('FR-LAP-07 menolak detail jurnal milik guru lain, tetapi mengizinkan pengisinya', function (): void {
+    $this->travelTo(CarbonImmutable::parse(seninUji().' 09:00:00'));
+    ['rangkaian' => $r, 'jurnal' => $jurnal] = jurnalUntukDetail();
+
+    $lain = buatPegawaiDenganAkun(Pegawai::JENIS_GURU);
+
+    $this->actingAs($lain)
+        ->getJson('/api/v1/laporan/jurnal/'.$jurnal->id)
+        ->assertStatus(403);
+
+    $this->actingAs($lain)
+        ->getJson('/api/v1/laporan/jurnal/'.$jurnal->id.'/foto/'.(int) $jurnal->foto()->value('id'))
+        ->assertStatus(403);
+
+    // Guru pengampu sendiri tetap boleh membaca detailnya.
+    $this->actingAs($r['user'])
+        ->getJson('/api/v1/laporan/jurnal/'.$jurnal->id)
+        ->assertOk();
+
+    // Guru piket yang mengisi sesi ini juga boleh (jejak diisi_oleh_pegawai_id).
+    $piket = buatPegawaiDenganAkun(Pegawai::JENIS_GURU);
+    $jurnal->update(['diisi_oleh_pegawai_id' => $piket->pegawai->id]);
+
+    $this->actingAs($piket)
+        ->getJson('/api/v1/laporan/jurnal/'.$jurnal->id)
+        ->assertOk();
+});
+
+it('FR-LAP-07 mengirim id jurnal pada daftar agar tabel dapat membuka detail', function (): void {
+    $this->travelTo(CarbonImmutable::parse(seninUji().' 09:00:00'));
+    ['jurnal' => $jurnal] = jurnalUntukDetail();
+
+    $res = $this->actingAs(sebagaiAdmin())->getJson('/api/v1/laporan/jurnal/daftar?periode=hari_ini');
+    $res->assertOk();
+
+    expect($res->json('data.jurnal.0.id'))->toBe($jurnal->id)
+        // Bentuk `baris[]` tidak berubah: tetap 13 kolom seperti kontrak laporan.
+        ->and($res->json('data.baris.0'))->toHaveCount(13);
 });

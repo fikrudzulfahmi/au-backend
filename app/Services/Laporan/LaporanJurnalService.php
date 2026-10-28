@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services\Laporan;
 
+use App\Http\Resources\JurnalResource;
 use App\Models\Jadwal;
 use App\Models\JamKerja;
 use App\Models\Jurnal;
+use App\Models\JurnalFoto;
 use App\Models\Kelas;
 use App\Models\Pegawai;
 use App\Models\PengajuanIzin;
@@ -110,6 +112,10 @@ final class LaporanJurnalService
             ->get();
 
         $baris = $jurnal->map(fn (Jurnal $j): array => [
+            // Id jurnal ikut dikirim pada `jurnal[]` (bukan `baris[]`) supaya
+            // tabel laporan dapat menautkan baris ke detail read-only tanpa
+            // menambah kolom baru yang mengubah bentuk laporan & ekspor.
+            'id' => $j->id,
             'tanggal' => $j->tanggal?->toDateString(),
             'label_jam' => $j->labelJamKe(),
             'kelas' => $j->kelas?->nama,
@@ -661,6 +667,75 @@ final class LaporanJurnalService
                 ['label' => 'Belum', 'nilai' => $hitung['belum']],
                 ['label' => 'Berhalangan', 'nilai' => $hitung['berhalangan']],
             ],
+        ];
+    }
+
+    /**
+     * Detail satu jurnal untuk pembaca laporan (admin/kepala sekolah/wakasek).
+     *
+     * Berkas foto TIDAK dibuka sebagai tautan penyimpanan: tiap foto diberi URL
+     * rute laporan yang tetap memeriksa hak akses, karena kepala sekolah tidak
+     * punya akses ke endpoint `/jurnal`.
+     *
+     * @return array<string, mixed>
+     */
+    public function detailJurnal(Jurnal $jurnal): array
+    {
+        $jurnal->load([
+            'kelas:id,nama',
+            'pegawai:id,nip,nama',
+            'diisiOleh:id,nama',
+            'plottingMapel.mapel:id,kode,nama',
+            'foto',
+            'presensiSiswa.siswa:id,nis,nama,jenis_kelamin',
+        ]);
+
+        /** @var array<string, int> $hitung */
+        $hitung = [PresensiSiswa::HADIR => 0, PresensiSiswa::SAKIT => 0, PresensiSiswa::IZIN => 0,
+            PresensiSiswa::ALPA => 0, PresensiSiswa::BOLOS => 0, PresensiSiswa::TERLAMBAT => 0];
+
+        foreach ($jurnal->presensiSiswa as $p) {
+            if (array_key_exists($p->status, $hitung)) {
+                $hitung[$p->status]++;
+            }
+        }
+
+        return [
+            'id' => $jurnal->id,
+            'tanggal' => $jurnal->tanggal?->toDateString(),
+            'label_jam' => $jurnal->labelJamKe(),
+            'jam_ke_mulai' => (int) $jurnal->jam_ke_mulai,
+            'jam_ke_selesai' => (int) $jurnal->jam_ke_selesai,
+            'kelas' => $jurnal->kelas?->nama,
+            'mapel' => $jurnal->plottingMapel?->mapel?->nama,
+            'kode_mapel' => $jurnal->plottingMapel?->mapel?->kode,
+            'nip' => $jurnal->pegawai?->nip,
+            'guru' => $jurnal->pegawai?->nama,
+            // Satu teks siap tampil, sama seperti kolom Guru pada daftar laporan.
+            'guru_keterangan' => $jurnal->diisiOleh?->nama === null
+                ? $jurnal->pegawai?->nama
+                : sprintf('%s (diisi guru piket: %s)', $jurnal->pegawai?->nama, $jurnal->diisiOleh->nama),
+            'diisi_oleh' => $jurnal->diisiOleh?->nama,
+            'materi' => $jurnal->materi,
+            'kegiatan' => $jurnal->kegiatan,
+            'catatan' => $jurnal->catatan,
+            'ringkasan' => [
+                'H' => $hitung[PresensiSiswa::HADIR],
+                'S' => $hitung[PresensiSiswa::SAKIT],
+                'I' => $hitung[PresensiSiswa::IZIN],
+                'A' => $hitung[PresensiSiswa::ALPA],
+                'B' => $hitung[PresensiSiswa::BOLOS],
+                'T' => $hitung[PresensiSiswa::TERLAMBAT],
+            ],
+            'presensi_siswa' => JurnalResource::presensiLengkap($jurnal),
+            'foto' => $jurnal->foto
+                ->sortBy('urutan')
+                ->values()
+                ->map(fn (JurnalFoto $f): array => [
+                    'id' => $f->id,
+                    'urutan' => (int) $f->urutan,
+                    'url' => url(sprintf('/api/v1/laporan/jurnal/%d/foto/%d', $jurnal->id, $f->id)),
+                ])->all(),
         ];
     }
 }

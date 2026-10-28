@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1\Laporan;
 
 use App\Exceptions\AturanBisnisException;
+use App\Models\Jurnal;
+use App\Models\JurnalFoto;
 use App\Models\Kelas;
 use App\Models\Semester;
 use App\Services\Laporan\DokumenResmiService;
@@ -12,6 +14,8 @@ use App\Services\Laporan\LaporanJurnalService;
 use App\Support\PeriodeLaporan;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -117,6 +121,48 @@ final class LaporanJurnalController extends LaporanController
         return $this->sajikan($hasil, $request, 'landscape');
     }
 
+    /**
+     * Detail read-only satu jurnal untuk pembaca laporan (FR-LAP-07).
+     *
+     * Admin/kepala sekolah/wakasek boleh membuka jurnal siapa pun; guru hanya
+     * jurnal miliknya atau yang ia isi sebagai guru piket (L(S) FR-LAP-12).
+     * Berbeda dari `/jurnal/{id}`, endpoint ini tidak memberi hak menyunting.
+     */
+    public function detail(Request $request, Jurnal $jurnal): JsonResponse
+    {
+        $this->pastikanBolehBaca($request, $jurnal);
+
+        return response()->json(['data' => $this->laporan->detailJurnal($jurnal)]);
+    }
+
+    /** Foto kegiatan jurnal; tetap melewati pemeriksaan hak akses laporan. */
+    public function foto(Request $request, Jurnal $jurnal, JurnalFoto $foto): JsonResponse|BinaryFileResponse
+    {
+        // Foto harus benar-benar milik jurnal pada URL, bukan sekadar id yang sah.
+        if ((int) $foto->jurnal_id !== (int) $jurnal->id) {
+            throw new AturanBisnisException('Foto tidak ditemukan pada jurnal ini.', 'FOTO_TIDAK_ADA', 404);
+        }
+
+        $this->pastikanBolehBaca($request, $jurnal);
+
+        // BR-30 — setelah retensi kolom path dikosongkan dan berkasnya dibuang.
+        if ($foto->foto_path === null || $foto->foto_path === '') {
+            return response()->json([
+                'message' => 'Berkas foto sudah tidak tersedia karena masa simpan berakhir.',
+            ], 404);
+        }
+
+        $berkas = Storage::disk('local')->path($foto->foto_path);
+
+        if (! is_file($berkas)) {
+            return response()->json([
+                'message' => 'Berkas foto sudah tidak tersedia karena masa simpan berakhir.',
+            ], 404);
+        }
+
+        return response()->file($berkas);
+    }
+
     /** FR-LAP-08 / BR-26 — rekap kepatuhan jurnal per guru. */
     public function kepatuhan(Request $request): JsonResponse|Response
     {
@@ -167,6 +213,26 @@ final class LaporanJurnalController extends LaporanController
         );
 
         return $this->sajikan($hasil, $request);
+    }
+
+    /**
+     * Kepala sekolah & wakasek boleh membaca SEMUA jurnal; guru hanya miliknya
+     * sendiri atau jurnal yang ia isi sebagai guru piket hari itu (L(S) FR-LAP-12).
+     */
+    private function pastikanBolehBaca(Request $request, Jurnal $jurnal): void
+    {
+        if ($this->penggunaMemantau($request)) {
+            return;
+        }
+
+        $pegawai = $request->user()?->pegawai;
+        $boleh = $pegawai !== null
+            && ((int) $jurnal->pegawai_id === (int) $pegawai->getKey()
+                || (int) $jurnal->diisi_oleh_pegawai_id === (int) $pegawai->getKey());
+
+        if (! $boleh) {
+            throw new AturanBisnisException('Anda tidak berhak atas jurnal ini.', 'AKSES_DITOLAK', 403);
+        }
     }
 
     /**

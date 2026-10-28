@@ -415,6 +415,12 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('/jurnal/daftar', [LaporanJurnalController::class, 'daftar']);
                 Route::get('/jurnal/kepatuhan', [LaporanJurnalController::class, 'kepatuhan']);
                 Route::get('/jurnal/jam-mengajar', [LaporanJurnalController::class, 'jamMengajar']);
+                // Detail read-only satu jurnal + fotonya (FR-LAP-07). Rute ini
+                // memberi kepala sekolah & wakasek akses baca tanpa membuka
+                // endpoint `/jurnal` yang bersifat menyunting.
+                Route::get('/jurnal/{jurnal}', [LaporanJurnalController::class, 'detail'])->whereNumber('jurnal');
+                Route::get('/jurnal/{jurnal}/foto/{foto}', [LaporanJurnalController::class, 'foto'])
+                    ->whereNumber('jurnal')->whereNumber('foto');
             });
 
             // Dasbor harian pengisian jurnal — memotong seluruh kelas sekolah
