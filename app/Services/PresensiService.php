@@ -198,6 +198,20 @@ final class PresensiService
 
         $kolomValidasi = $sisi === 'pulang' ? 'pulang_validasi' : 'masuk_validasi';
 
+        // Antrean persetujuan memuat baris yang menunggu di sisi mana pun, sedangkan
+        // klien lama hanya mengirim `keputusan`. Bila sisi yang diminta sudah final
+        // tetapi sisi seberangnya masih menunggu, putuskan sisi yang benar-benar
+        // menunggu — kalau tidak, Setujui/Tolak gagal untuk presensi pulang.
+        if ($presensi->{$kolomValidasi} !== PresensiPegawai::MENUNGGU) {
+            $sisiLain = $sisi === 'pulang' ? 'masuk' : 'pulang';
+            $kolomLain = $sisiLain === 'pulang' ? 'pulang_validasi' : 'masuk_validasi';
+
+            if ($presensi->{$kolomLain} === PresensiPegawai::MENUNGGU) {
+                $sisi = $sisiLain;
+                $kolomValidasi = $kolomLain;
+            }
+        }
+
         if ($presensi->{$kolomValidasi} !== PresensiPegawai::MENUNGGU) {
             throw AturanBisnisException::tolak('Presensi ini tidak sedang menunggu keputusan.', 'keputusan');
         }

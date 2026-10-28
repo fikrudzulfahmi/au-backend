@@ -100,6 +100,17 @@ final class PengajuanIzinController extends Controller
         ]);
     }
 
+    /**
+     * Hapus pengajuan (admin/kepala sekolah) — membersihkan pengajuan salah input
+     * yang kalau dibiarkan memblokir pengajuan baru pada tanggal yang sama.
+     */
+    public function destroy(Request $request, PengajuanIzin $pengajuanIzin): JsonResponse
+    {
+        $this->pengajuan->hapusIzin($pengajuanIzin, $request->user());
+
+        return response()->json(['message' => 'Pengajuan dihapus.']);
+    }
+
     /** FR-IZN-03 — pegawai membatalkan pengajuannya selama masih menunggu. */
     public function batalkan(Request $request, PengajuanIzin $pengajuanIzin): JsonResponse
     {

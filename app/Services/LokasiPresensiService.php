@@ -29,7 +29,19 @@ final class LokasiPresensiService
     {
         $radius = (int) $data['radius_m'];
 
-        if ($radius < 10 || $radius > 10000) {
+        // Radius 0 sah bila zona memakai poligon: batas lokasi sepenuhnya ditentukan
+        // poligon, dan radius hanya dipakai sebagai cadangan untuk lokasi tanpa poligon.
+        $poligon = $data['poligon'] ?? null;
+        $punyaPoligon = is_array($poligon) && count($poligon) >= 3;
+
+        if ($radius === 0 && ! $punyaPoligon) {
+            throw AturanBisnisException::tolak(
+                'Isi radius minimal 10 meter, atau gambar zona poligon minimal 3 titik.',
+                'radius_m',
+            );
+        }
+
+        if (($radius !== 0 && $radius < 10) || $radius > 10000) {
             throw AturanBisnisException::tolak('Radius harus antara 10 sampai 10.000 meter.', 'radius_m');
         }
 

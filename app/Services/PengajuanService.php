@@ -8,6 +8,7 @@ use App\Exceptions\AturanBisnisException;
 use App\Models\Pegawai;
 use App\Models\PengajuanIzin;
 use App\Models\PengajuanLuarRadius;
+use App\Models\PresensiPegawai;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -174,6 +175,81 @@ final class PengajuanService
         $this->audit->catat(AuditLogService::AKSI_BATAL_IZIN, $oleh, $pengajuan, $lama, ['status' => 'dibatalkan']);
 
         return $pengajuan->refresh();
+    }
+
+    /**
+     * Hapus pengajuan izin yang tidak lagi mengikat (permintaan admin sekolah).
+     *
+     * Hanya status menunggu/ditolak/dibatalkan yang boleh dihapus: pengajuan yang
+     * sudah disetujui menjadi dasar presensi sah (BR-25/BR-17) sehingga harus
+     * dipertahankan. Baris luar radius turunannya ikut terhapus, kecuali sudah
+     * dipakai presensi — dalam hal itu penghapusan ditolak.
+     */
+    public function hapusIzin(PengajuanIzin $pengajuan, User $oleh): void
+    {
+        if ($pengajuan->status === PengajuanIzin::STATUS_DISETUJUI) {
+            throw AturanBisnisException::tolak(
+                'Pengajuan yang sudah disetujui tidak dapat dihapus karena menjadi dasar presensi sah.',
+                'status',
+            );
+        }
+
+        $anak = $pengajuan->luarRadius()->get();
+
+        foreach ($anak as $luar) {
+            $this->pastikanTidakDipakaiPresensi($luar);
+        }
+
+        DB::transaction(function () use ($pengajuan, $anak, $oleh): void {
+            $lama = $pengajuan->only(['jenis', 'tanggal_mulai', 'tanggal_selesai', 'status']);
+
+            $this->audit->catat(AuditLogService::AKSI_HAPUS, $oleh, $pengajuan, $lama, [
+                'sumber' => 'pengajuan_izin',
+                'luar_radius_ikut_terhapus' => $anak->pluck('id')->all(),
+            ]);
+
+            $pengajuan->luarRadius()->delete();
+            $pengajuan->delete();
+        });
+    }
+
+    /** Hapus satu pengajuan presensi luar radius mandiri (FR-IZN-06). */
+    public function hapusLuarRadius(PengajuanLuarRadius $pengajuan, User $oleh): void
+    {
+        if ($pengajuan->status === PengajuanLuarRadius::STATUS_DISETUJUI) {
+            throw AturanBisnisException::tolak(
+                'Pengajuan yang sudah disetujui tidak dapat dihapus karena menjadi dasar presensi sah.',
+                'status',
+            );
+        }
+
+        $this->pastikanTidakDipakaiPresensi($pengajuan);
+
+        DB::transaction(function () use ($pengajuan, $oleh): void {
+            $lama = $pengajuan->only(['tanggal', 'status', 'alasan']);
+
+            $this->audit->catat(AuditLogService::AKSI_HAPUS, $oleh, $pengajuan, $lama, [
+                'sumber' => 'pengajuan_luar_radius',
+            ]);
+
+            $pengajuan->delete();
+        });
+    }
+
+    /** Presensi yang sudah memakai pengajuan ini tidak boleh kehilangan rujukannya. */
+    private function pastikanTidakDipakaiPresensi(PengajuanLuarRadius $pengajuan): void
+    {
+        $dipakai = PresensiPegawai::query()
+            ->where('masuk_pengajuan_luar_radius_id', $pengajuan->getKey())
+            ->orWhere('pulang_pengajuan_luar_radius_id', $pengajuan->getKey())
+            ->exists();
+
+        if ($dipakai) {
+            throw AturanBisnisException::tolak(
+                'Pengajuan ini sudah dipakai presensi sehingga tidak dapat dihapus.',
+                'status',
+            );
+        }
     }
 
     /** FR-IZN-06 — pengajuan presensi luar radius mandiri (satu tanggal). */

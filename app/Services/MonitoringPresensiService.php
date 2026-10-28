@@ -9,6 +9,7 @@ use App\Models\Pegawai;
 use App\Models\PengajuanIzin;
 use App\Models\PresensiPegawai;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 
 /**
  * FR-PRS-10 — monitoring harian presensi.
@@ -132,7 +133,7 @@ final class MonitoringPresensiService
     }
 
     /** FR-PRS-11 — antrean presensi luar radius yang menunggu keputusan. */
-    public function antreanPersetujuan(?string $tanggal = null): array
+    public function antreanPersetujuan(?string $tanggal = null): Collection
     {
         return PresensiPegawai::query()
             ->with(['pegawai', 'masukLokasi', 'pulangLokasi'])
@@ -140,8 +141,7 @@ final class MonitoringPresensiService
             ->where(fn ($q) => $q->where('masuk_validasi', PresensiPegawai::MENUNGGU)
                 ->orWhere('pulang_validasi', PresensiPegawai::MENUNGGU))
             ->orderBy('tanggal')
-            ->get()
-            ->toArray();
+            ->get();
     }
 
     /** Kategori status satu pegawai (FR-PRS-10). */

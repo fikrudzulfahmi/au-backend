@@ -57,21 +57,31 @@ final class MonitoringPresensiController extends Controller
         $baris = $this->monitoring->antreanPersetujuan($tanggal);
 
         return response()->json([
-            'data' => array_map(fn (array $b): array => [
-                'presensi_id' => $b['id'],
-                'pegawai_id' => $b['pegawai_id'],
-                'pegawai' => $b['pegawai']['nama'] ?? null,
-                'nip' => $b['pegawai']['nip'] ?? null,
-                'tanggal' => $b['tanggal'],
-                'masuk_jam' => $b['masuk_waktu'] !== null ? substr((string) $b['masuk_waktu'], 11, 5) : null,
-                'masuk_lat' => $b['masuk_lat'],
-                'masuk_lng' => $b['masuk_lng'],
-                'masuk_jarak_m' => $b['masuk_jarak_m'],
-                'masuk_validasi' => $b['masuk_validasi'],
-                'masuk_alasan_luar_radius' => $b['masuk_alasan_luar_radius'],
-                'pulang_validasi' => $b['pulang_validasi'],
-                'pulang_alasan_luar_radius' => $b['pulang_alasan_luar_radius'],
-            ], $baris),
+            'data' => $baris->map(fn (PresensiPegawai $b): array => [
+                'presensi_id' => $b->id,
+                'pegawai_id' => $b->pegawai_id,
+                'pegawai' => $b->pegawai?->nama,
+                'nip' => $b->pegawai?->nip,
+                'tanggal' => $b->tanggal?->toDateString(),
+                'masuk_jam' => $b->masuk_waktu?->format('H:i'),
+                'masuk_lat' => $b->masuk_lat,
+                'masuk_lng' => $b->masuk_lng,
+                'masuk_jarak_m' => $b->masuk_jarak_m,
+                'masuk_validasi' => $b->masuk_validasi,
+                'masuk_alasan_luar_radius' => $b->masuk_alasan_luar_radius,
+                // Sisi pulang ikut dikirim: antrean memuat baris yang menunggu di sisi
+                // mana pun, sehingga UI harus tahu jam/jarak/alasan sisi yang menunggu.
+                'pulang_jam' => $b->pulang_waktu?->format('H:i'),
+                'pulang_lat' => $b->pulang_lat,
+                'pulang_lng' => $b->pulang_lng,
+                'pulang_jarak_m' => $b->pulang_jarak_m,
+                'pulang_validasi' => $b->pulang_validasi,
+                'pulang_alasan_luar_radius' => $b->pulang_alasan_luar_radius,
+                'sisi_menunggu' => array_values(array_filter([
+                    $b->masuk_validasi === PresensiPegawai::MENUNGGU ? 'masuk' : null,
+                    $b->pulang_validasi === PresensiPegawai::MENUNGGU ? 'pulang' : null,
+                ])),
+            ])->values(),
         ]);
     }
 

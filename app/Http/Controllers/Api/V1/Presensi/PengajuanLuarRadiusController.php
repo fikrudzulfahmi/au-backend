@@ -63,6 +63,14 @@ final class PengajuanLuarRadiusController extends Controller
         ], 201);
     }
 
+    /** Hapus pengajuan luar radius mandiri (admin/kepala sekolah). */
+    public function destroy(Request $request, PengajuanLuarRadius $pengajuanLuarRadius): JsonResponse
+    {
+        $this->pengajuan->hapusLuarRadius($pengajuanLuarRadius, $request->user());
+
+        return response()->json(['message' => 'Pengajuan luar radius dihapus.']);
+    }
+
     public function putuskan(Request $request, PengajuanLuarRadius $pengajuanLuarRadius): JsonResponse
     {
         $data = $request->validate([

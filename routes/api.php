@@ -293,12 +293,18 @@ Route::prefix('v1')->group(function (): void {
             // FR-IZN-04 — penyetuju: admin atau kepala sekolah.
             Route::patch('/{pengajuanIzin}/putuskan', [PengajuanIzinController::class, 'putuskan'])
                 ->middleware('peran:admin,kepala_sekolah');
+
+            // Hapus pengajuan salah input (hanya status belum disetujui).
+            Route::delete('/{pengajuanIzin}', [PengajuanIzinController::class, 'destroy'])
+                ->middleware('peran:admin,kepala_sekolah');
         });
 
         Route::prefix('pengajuan-luar-radius')->group(function (): void {
             Route::get('/', [PengajuanLuarRadiusController::class, 'index']);
             Route::post('/', [PengajuanLuarRadiusController::class, 'store']);
             Route::patch('/{pengajuanLuarRadius}/putuskan', [PengajuanLuarRadiusController::class, 'putuskan'])
+                ->middleware('peran:admin,kepala_sekolah');
+            Route::delete('/{pengajuanLuarRadius}', [PengajuanLuarRadiusController::class, 'destroy'])
                 ->middleware('peran:admin,kepala_sekolah');
         });
 

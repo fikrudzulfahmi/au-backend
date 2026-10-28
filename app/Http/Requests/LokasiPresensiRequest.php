@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 /** FR-LOK-01 — master lokasi presensi. */
 class LokasiPresensiRequest extends FormRequest
@@ -20,13 +21,38 @@ class LokasiPresensiRequest extends FormRequest
             'nama' => ['required', 'string', 'max:120'],
             'latitude' => ['required', 'numeric', 'between:-90,90'],
             'longitude' => ['required', 'numeric', 'between:-180,180'],
-            'radius_m' => ['required', 'integer', 'min:10', 'max:10000'],
+            // Radius 0 sah selama zona poligon terisi: klien memakai poligon sebagai
+            // satu-satunya batas dan tidak perlu lingkaran radius sebagai cadangan.
+            'radius_m' => ['required', 'integer', 'min:0', 'max:10000'],
             'poligon' => ['nullable', 'array', 'min:3', 'max:200'],
             'poligon.*' => ['array', 'size:2'],
             'poligon.*.0' => ['required', 'numeric', 'between:-90,90'],
             'poligon.*.1' => ['required', 'numeric', 'between:-180,180'],
             'is_default' => ['sometimes', 'boolean'],
             'is_active' => ['sometimes', 'boolean'],
+        ];
+    }
+
+    /**
+     * Radius 0 hanya bermakna bila ada poligon; tanpa keduanya lokasi tidak punya
+     * batas sama sekali sehingga presensi tidak akan pernah sah.
+     *
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                $radius = (int) $this->input('radius_m', 0);
+                $poligon = $this->input('poligon');
+
+                if ($radius < 1 && (! is_array($poligon) || count($poligon) < 3)) {
+                    $validator->errors()->add(
+                        'radius_m',
+                        'Isi radius minimal 10 meter, atau gambar zona poligon minimal 3 titik.',
+                    );
+                }
+            },
         ];
     }
 
