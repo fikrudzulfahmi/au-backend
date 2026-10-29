@@ -60,7 +60,29 @@ final class LokasiPresensiService
 
             // Zona poligon disimpan bila disertakan; null bila dikosongkan.
             if (array_key_exists('poligon', $data)) {
-                $isi['poligon'] = $data['poligon'] !== null ? Poligon::normalisasi($data['poligon']) : null;
+                $poligon = $data['poligon'] !== null ? Poligon::normalisasi($data['poligon']) : null;
+
+                // Jangan menelan poligon yang bentuknya tidak dikenali: dulu nilai itu
+                // menjadi null tanpa pesan, lokasi tersimpan tanpa zona, lalu seluruh
+                // areal dinilai dengan radius dan presensi sah ikut ditolak.
+                if ($data['poligon'] !== null && $poligon === null) {
+                    throw AturanBisnisException::tolak(
+                        'Zona poligon tidak valid: minimal 3 titik dengan format [lat, lng].',
+                        'poligon',
+                    );
+                }
+
+                $isi['poligon'] = $poligon;
+
+                // Titik pusat diselaraskan dengan areal poligon. Tanpa ini `latitude`/
+                // `longitude` tetap titik lama (bisa di luar gambar), sehingga peta dan
+                // klien lama menilai jarak dari titik yang salah.
+                $pusat = $poligon !== null ? Poligon::pusat($poligon) : null;
+
+                if ($pusat !== null) {
+                    $isi['latitude'] = $pusat['lat'];
+                    $isi['longitude'] = $pusat['lng'];
+                }
             }
 
             $target->fill($isi);

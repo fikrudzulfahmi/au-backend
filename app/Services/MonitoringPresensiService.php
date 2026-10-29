@@ -104,6 +104,13 @@ final class MonitoringPresensiService
                 'lokasi_lat' => $p?->masukLokasi?->latitude,
                 'lokasi_lng' => $p?->masukLokasi?->longitude,
                 'lokasi_radius_m' => $p?->masukLokasi?->radius_m,
+                // Bentuk zona dipakai peta monitoring: lingkaran radius saja membuat titik
+                // yang sah di dalam poligon tampak "di luar".
+                'lokasi_poligon' => $p?->masukLokasi?->poligon,
+                'lokasi_pulang_lat' => $p?->pulangLokasi?->latitude,
+                'lokasi_pulang_lng' => $p?->pulangLokasi?->longitude,
+                'lokasi_pulang_radius_m' => $p?->pulangLokasi?->radius_m,
+                'lokasi_pulang_poligon' => $p?->pulangLokasi?->poligon,
                 'pulang_jam' => $p?->pulang_waktu?->format('H:i'),
                 'masuk_status' => $p?->masuk_status,
                 'pulang_status' => $p?->pulang_status,

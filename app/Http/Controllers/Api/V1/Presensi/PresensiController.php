@@ -48,11 +48,14 @@ final class PresensiController extends Controller
                     'label_jenis' => $status['pengajuan']->labelJenis(),
                 ],
                 'presensi' => $status['presensi'] === null ? null : new PresensiResource($status['presensi']),
-                // Daftar lokasi efektif dipakai klien untuk menampilkan radius terdekat.
+                // Daftar lokasi efektif dipakai klien untuk menampilkan zona terdekat.
+                // `poligon` wajib ikut: tanpa itu klien hanya bisa menilai radius dan
+                // menandai pegawai di dalam poligon sebagai "di luar radius".
                 'lokasi' => $status['lokasi']->map(fn ($l): array => [
                     'id' => $l->id, 'nama' => $l->nama, 'radius_m' => (int) $l->radius_m,
                     'latitude' => (float) $l->latitude, 'longitude' => (float) $l->longitude,
                     'is_default' => (bool) $l->is_default,
+                    'poligon' => $l->poligon,
                 ])->all(),
             ],
         ]);

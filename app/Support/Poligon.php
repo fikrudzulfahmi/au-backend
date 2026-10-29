@@ -100,9 +100,13 @@ final class Poligon
      * Memeriksa apakah koordinat (lat, lng) berada di dalam poligon.
      * Menggunakan algoritma ray casting (aturan even-odd) dengan penanganan titik di tepi.
      *
+     * `$toleransiMeter` memberi kelonggaran di luar tepi poligon untuk menyerap galat
+     * GPS perangkat: tanpa itu, jitter 10–30 m di dekat pagar membuat presensi yang sah
+     * dinilai "luar zona". Toleransi harus berasal dari akurasi GPS yang dilaporkan.
+     *
      * @param  array<mixed>  $poligon
      */
-    public static function memuat(array $poligon, float $lat, float $lng): bool
+    public static function memuat(array $poligon, float $lat, float $lng, float $toleransiMeter = 0.0): bool
     {
         $titik = self::normalisasi($poligon);
 
@@ -133,7 +137,79 @@ final class Poligon
             }
         }
 
-        return $diDalam;
+        if ($diDalam) {
+            return true;
+        }
+
+        // Zona tepi: titik di luar garis tetapi masih dalam radius galat GPS dianggap sah.
+        return $toleransiMeter > 0.0 && self::jarakKeTepi($titik, $lat, $lng) <= $toleransiMeter;
+    }
+
+    /**
+     * Titik pusat poligon (rata-rata verteks) dipakai sebagai `latitude`/`longitude`
+     * lokasi: peta, radius cadangan klien lama, dan pengurutan "lokasi terdekat"
+     * semuanya memakai titik ini, sehingga titik pusat harus berada di dalam areal.
+     *
+     * @param  array<mixed>  $poligon
+     * @return array{lat: float, lng: float}|null
+     */
+    public static function pusat(array $poligon): ?array
+    {
+        $titik = self::normalisasi($poligon);
+
+        if ($titik === null) {
+            return null;
+        }
+
+        $jumlah = count($titik);
+        $lat = 0.0;
+        $lng = 0.0;
+
+        foreach ($titik as [$tLat, $tLng]) {
+            $lat += $tLat;
+            $lng += $tLng;
+        }
+
+        return ['lat' => $lat / $jumlah, 'lng' => $lng / $jumlah];
+    }
+
+    /**
+     * Jarak terdekat (meter) dari titik ke tepi poligon.
+     *
+     * Proyeksi datar (equirectangular) dipakai karena rentang poligon sekolah hanya
+     * puluhan–ratusan meter, sehingga galatnya jauh di bawah 1 cm.
+     *
+     * @param  non-empty-list<array{0: float, 1: float}>  $titik
+     */
+    public static function jarakKeTepi(array $titik, float $lat, float $lng): float
+    {
+        $meterPerDerajatLat = 110540.0;
+        $meterPerDerajatLng = 111320.0 * cos(deg2rad($lat));
+
+        $terdekat = INF;
+        $jumlah = count($titik);
+
+        for ($i = 0, $j = $jumlah - 1; $i < $jumlah; $j = $i++) {
+            $ax = ($titik[$j][1] - $lng) * $meterPerDerajatLng;
+            $ay = ($titik[$j][0] - $lat) * $meterPerDerajatLat;
+            $bx = ($titik[$i][1] - $lng) * $meterPerDerajatLng;
+            $by = ($titik[$i][0] - $lat) * $meterPerDerajatLat;
+
+            // Jarak titik (0,0) ke segmen A–B pada bidang meter.
+            $dx = $bx - $ax;
+            $dy = $by - $ay;
+            $panjangSq = ($dx * $dx) + ($dy * $dy);
+
+            $t = $panjangSq <= 0.0 ? 0.0 : max(0.0, min(1.0, -(($ax * $dx) + ($ay * $dy)) / $panjangSq));
+
+            $jarak = sqrt((($ax + ($t * $dx)) ** 2) + (($ay + ($t * $dy)) ** 2));
+
+            if ($jarak < $terdekat) {
+                $terdekat = $jarak;
+            }
+        }
+
+        return $terdekat;
     }
 
     /**

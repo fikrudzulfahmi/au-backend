@@ -34,6 +34,12 @@ use Illuminate\Support\Facades\DB;
  */
 final class PresensiService
 {
+    /** Akurasi GPS yang diasumsikan bila perangkat lama tidak mengirim `akurasi_m`. */
+    private const AKURASI_BAWAAN_M = 15;
+
+    /** Batas atas kelonggaran tepi zona, agar zona sekolah tidak melebar berlebihan. */
+    private const TOLERANSI_ZONA_MAKS_M = 25;
+
     public function __construct(
         private readonly BerkasService $berkas,
         private readonly WaktuService $waktu,
@@ -74,7 +80,7 @@ final class PresensiService
         // FR-PRS-06 — akurasi GPS buruk BUKAN "di luar radius": presensi tidak dikirim.
         $this->pastikanAkurasi($masukan['akurasi_m']);
 
-        $penilaian = $this->nilaiRadius($pegawai, $masukan['lat'], $masukan['lng'], $tanggal, $masukan['alasan']);
+        $penilaian = $this->nilaiRadius($pegawai, $masukan['lat'], $masukan['lng'], $tanggal, $masukan['alasan'], $masukan['akurasi_m']);
 
         $hasil = $presensi ?? new PresensiPegawai(['pegawai_id' => $pegawai->getKey(), 'tanggal' => $tanggal]);
         $lama = $presensi?->only(['masuk_waktu', 'masuk_status', 'masuk_validasi']);
@@ -141,7 +147,7 @@ final class PresensiService
         $masukan = $this->siapkanMasukan($data, false);
         $this->pastikanAkurasi($masukan['akurasi_m']);
 
-        $penilaian = $this->nilaiRadius($pegawai, $masukan['lat'], $masukan['lng'], $tanggal, $masukan['alasan']);
+        $penilaian = $this->nilaiRadius($pegawai, $masukan['lat'], $masukan['lng'], $tanggal, $masukan['alasan'], $masukan['akurasi_m']);
         $status = $this->statusPulang($pegawai, $sekarang);
         $lama = $presensi->only(['pulang_waktu', 'pulang_status', 'pulang_validasi']);
 
@@ -466,18 +472,27 @@ final class PresensiService
     /**
      * BR-11/BR-17/BR-18 — menentukan validasi presensi berdasarkan posisi.
      *
+     * `$akurasi` (meter) dipakai sebagai kelonggaran tepi: titik di luar garis zona
+     * tetapi masih dalam radius galat GPS tetap sah, supaya jitter GPS di dekat pagar
+     * tidak menjatuhkan presensi ke antrean persetujuan.
+     *
      * @return array{validasi: string, lokasi_id: ?int, jarak_m: ?float, pengajuan_id: ?int}
      */
-    private function nilaiRadius(Pegawai $pegawai, float $lat, float $lng, string $tanggal, ?string $alasan): array
+    private function nilaiRadius(Pegawai $pegawai, float $lat, float $lng, string $tanggal, ?string $alasan, ?int $akurasi = null): array
     {
         $lokasiEfektif = $this->lokasi->lokasiEfektif($pegawai);
         $jarakTerdekat = $this->lokasi->terdekat($lokasiEfektif, $lat, $lng)['jarak_m'];
+
+        // Kelonggaran tepi = galat GPS yang dilaporkan, dibatasi 25 m agar tidak
+        // melebarkan zona sekolah secara berlebihan.
+        $toleransi = (float) min($akurasi ?? self::AKURASI_BAWAAN_M, self::TOLERANSI_ZONA_MAKS_M);
 
         // Zona poligon diperiksa untuk SEMUA lokasi pegawai: lokasi yang pusatnya paling
         // dekat belum tentu arealnya yang memuat titik ini, sedangkan bentuk area sekolah
         // tidak selalu mendekati lingkaran.
         $lokasiSah = $lokasiEfektif->first(
-            fn (LokasiPresensi $l): bool => Poligon::sah($l->poligon) && Poligon::memuat($l->poligon, $lat, $lng)
+            fn (LokasiPresensi $l): bool => Poligon::sah($l->poligon)
+                && Poligon::memuat($l->poligon, $lat, $lng, $toleransi)
         );
 
         if ($lokasiSah === null) {
@@ -486,7 +501,8 @@ final class PresensiService
             $radius = $this->lokasi->terdekat($tanpaPoligon, $lat, $lng);
 
             if ($radius['lokasi'] !== null && $radius['jarak_m'] !== null
-                && $radius['jarak_m'] <= (float) $radius['lokasi']->radius_m) {
+                && (float) $radius['lokasi']->radius_m > 0.0
+                && $radius['jarak_m'] <= (float) $radius['lokasi']->radius_m + $toleransi) {
                 $lokasiSah = $radius['lokasi'];
             }
         }

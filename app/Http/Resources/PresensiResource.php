@@ -41,6 +41,9 @@ class PresensiResource extends JsonResource
                 'jarak_m' => $this->masuk_jarak_m,
                 'lokasi_id' => $this->masuk_lokasi_id,
                 'lokasi' => $this->whenLoaded('masukLokasi', fn () => $this->masukLokasi?->nama),
+                // Bentuk zona ikut dikirim agar peta admin menggambar areal sebenarnya,
+                // bukan lingkaran radius yang bisa menyesatkan pada lokasi berpoligon.
+                'lokasi_poligon' => $this->whenLoaded('masukLokasi', fn () => $this->masukLokasi?->poligon),
                 'status' => $this->masuk_status,
                 'menit_terlambat' => (int) $this->masuk_menit_terlambat,
                 'validasi' => $this->masuk_validasi,
@@ -58,6 +61,7 @@ class PresensiResource extends JsonResource
                 'jarak_m' => $this->pulang_jarak_m,
                 'lokasi_id' => $this->pulang_lokasi_id,
                 'lokasi' => $this->whenLoaded('pulangLokasi', fn () => $this->pulangLokasi?->nama),
+                'lokasi_poligon' => $this->whenLoaded('pulangLokasi', fn () => $this->pulangLokasi?->poligon),
                 'status' => $this->pulang_status,
                 'menit_cepat' => (int) $this->pulang_menit_cepat,
                 'validasi' => $this->pulang_validasi,

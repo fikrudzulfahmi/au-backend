@@ -210,3 +210,68 @@ it('admin dapat menyimpan dan memperbarui zona poligon melalui API lokasi presen
 
     $update->assertOk()->assertJsonPath('data.poligon', null);
 });
+
+it('memberi kelonggaran galat GPS di tepi poligon tanpa melebarkan zona berlebihan', function (): void {
+    // Persegi 100 m x 200 m di sekitar sekolah.
+    $poligon = [
+        [-7.8654000, 111.4640000],
+        [-7.8644000, 111.4640000],
+        [-7.8644000, 111.4660000],
+        [-7.8654000, 111.4660000],
+    ];
+
+    // Tepat 10 m di luar sisi utara (batas -7.8644).
+    $luar10m = -7.8643100;
+
+    expect(Poligon::memuat($poligon, $luar10m, 111.4650000))->toBeFalse()
+        ->and(Poligon::memuat($poligon, $luar10m, 111.4650000, 5.0))->toBeFalse()
+        ->and(Poligon::memuat($poligon, $luar10m, 111.4650000, 15.0))->toBeTrue()
+        // Jauh di luar tetap ditolak walau ada toleransi.
+        ->and(Poligon::memuat($poligon, -7.8630000, 111.4650000, 15.0))->toBeFalse();
+
+    // Jarak ke tepi dihitung dalam meter.
+    expect(Poligon::jarakKeTepi($poligon, $luar10m, 111.4650000))->toBeGreaterThan(9.0)
+        ->and(Poligon::jarakKeTepi($poligon, $luar10m, 111.4650000))->toBeLessThan(11.0);
+});
+
+it('menyelaraskan titik pusat lokasi dengan areal poligon saat disimpan', function (): void {
+    $admin = sebagaiAdmin();
+
+    $respons = test()->actingAs($admin)->postJson('/api/v1/pengaturan/lokasi', [
+        'nama' => 'Areal Miring',
+        'latitude' => -7.9000000,
+        'longitude' => 111.5000000,
+        'radius_m' => 150,
+        'poligon' => [
+            [-7.8654, 111.4640],
+            [-7.8644, 111.4640],
+            [-7.8644, 111.4660],
+            [-7.8654, 111.4660],
+        ],
+    ]);
+
+    $respons->assertCreated()
+        // Rata-rata verteks: -7.8649 / 111.4650, bukan titik lama yang jauh di luar areal.
+        ->assertJsonPath('data.latitude', -7.8649)
+        ->assertJsonPath('data.longitude', 111.465);
+});
+
+it('mengirim poligon pada status presensi hari ini agar klien menilai zona yang benar', function (): void {
+    test()->travelTo(CarbonImmutable::parse(seninUji().' 06:45:00'));
+
+    $p = siapkanPresensi(radius: 0);
+
+    $poligon = [
+        [-7.8654, 111.4640],
+        [-7.8644, 111.4640],
+        [-7.8644, 111.4660],
+        [-7.8654, 111.4660],
+    ];
+
+    $p['lokasi']->update(['poligon' => $poligon, 'radius_m' => 0]);
+
+    test()->actingAs($p['user'])->getJson('/api/v1/presensi/hari-ini')
+        ->assertOk()
+        ->assertJsonPath('data.lokasi.0.radius_m', 0)
+        ->assertJsonCount(4, 'data.lokasi.0.poligon');
+});
