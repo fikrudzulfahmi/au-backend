@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\LokasiPresensi;
 use App\Models\Pegawai;
 use App\Models\PengajuanIzin;
 use App\Models\PresensiPegawai;
@@ -90,6 +91,70 @@ it('menandai pegawai yang belum presensi pulang (FR-PRS-05/FR-PRS-10)', function
     $baris = collect($respons->json('data.baris'))->firstWhere('pegawai_id', $p['pegawai']->id);
 
     expect($baris['status'])->toBe('tidak_presensi_pulang');
+});
+
+/**
+ * FR-PRS-10 — monitoring membawa lokasi DAN foto kedua sisi presensi.
+ *
+ * Pimpinan harus bisa memeriksa dari mana guru presensi datang dan pulang: presensi
+ * pulang punya koordinat, lokasi, dan foto sendiri, bukan salinan sisi masuk.
+ */
+it('mengirim lokasi dan foto presensi pulang untuk pimpinan (FR-PRS-10)', function (): void {
+    $this->travelTo(CarbonImmutable::parse(seninUji().' 16:00:00'));
+
+    $p = siapkanPresensi();
+
+    $rumah = LokasiPresensi::factory()->create([
+        'nama' => 'Rumah Uji',
+        'latitude' => -7.9000000,
+        'longitude' => 111.4750000,
+        'radius_m' => 120,
+    ]);
+
+    Storage::disk('local')->put('presensi/uji/pulang.jpg', 'isi-foto');
+
+    $presensi = PresensiPegawai::factory()->create([
+        'pegawai_id' => $p['pegawai']->id,
+        'tanggal' => seninUji(),
+        'masuk_lokasi_id' => $p['lokasi']->id,
+        'pulang_waktu' => seninUji().' 15:10:00',
+        'pulang_status' => PresensiPegawai::PULANG_NORMAL,
+        'pulang_validasi' => PresensiPegawai::VALID,
+        'pulang_lat' => -7.8998000,
+        'pulang_lng' => 111.4749000,
+        'pulang_akurasi_m' => 12,
+        'pulang_jarak_m' => 4310,
+        'pulang_lokasi_id' => $rumah->id,
+        'pulang_foto_path' => 'presensi/uji/pulang.jpg',
+        'pulang_alasan_luar_radius' => 'Pulang langsung ke rumah.',
+    ]);
+
+    $respons = $this->actingAs(sebagaiAdmin())
+        ->getJson('/api/v1/monitoring/presensi-harian?tanggal='.seninUji());
+
+    $respons->assertOk();
+
+    $baris = collect($respons->json('data.baris'))->firstWhere('pegawai_id', $p['pegawai']->id);
+
+    expect($baris['masuk_lat'])->not->toBeNull()
+        ->and($baris['masuk_jarak_m'])->toBe(5)
+        ->and($baris['ada_foto_masuk'])->toBeTrue()
+        ->and($baris['pulang_jam'])->toBe('15:10')
+        // Sisi pulang: koordinat, jarak, nama lokasi, alasan, dan foto miliknya sendiri.
+        ->and($baris['pulang_lat'])->toEqual(-7.8998)
+        ->and($baris['pulang_lng'])->toEqual(111.4749)
+        ->and($baris['pulang_jarak_m'])->toBe(4310)
+        ->and($baris['lokasi_pulang'])->toBe('Rumah Uji')
+        ->and($baris['pulang_alasan_luar_radius'])->toBe('Pulang langsung ke rumah.')
+        ->and($baris['ada_foto_pulang'])->toBeTrue();
+
+    // Foto sisi pulang disajikan lewat rute ber-otorisasi untuk kepsek juga.
+    $this->actingAs(sebagaiKepsek())
+        ->get("/api/v1/presensi/{$presensi->id}/foto/pulang")
+        ->assertOk();
+
+    $presensi->refresh();
+    expect($presensi->pulang_foto_path)->toBe('presensi/uji/pulang.jpg');
 });
 
 it('menyaring monitoring harian menurut status', function (): void {

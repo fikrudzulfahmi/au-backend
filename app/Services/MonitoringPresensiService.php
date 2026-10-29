@@ -101,6 +101,8 @@ final class MonitoringPresensiService
                 'masuk_jam' => $p?->masuk_waktu?->format('H:i'),
                 'masuk_lat' => $p?->masuk_lat,
                 'masuk_lng' => $p?->masuk_lng,
+                'masuk_jarak_m' => $p?->masuk_jarak_m,
+                'masuk_akurasi_m' => $p?->masuk_akurasi_m,
                 'lokasi_lat' => $p?->masukLokasi?->latitude,
                 'lokasi_lng' => $p?->masukLokasi?->longitude,
                 'lokasi_radius_m' => $p?->masukLokasi?->radius_m,
@@ -112,6 +114,15 @@ final class MonitoringPresensiService
                 'lokasi_pulang_radius_m' => $p?->pulangLokasi?->radius_m,
                 'lokasi_pulang_poligon' => $p?->pulangLokasi?->poligon,
                 'pulang_jam' => $p?->pulang_waktu?->format('H:i'),
+                // Sisi pulang punya koordinat, lokasi, dan foto SENDIRI. Tanpa field ini
+                // pimpinan hanya bisa memeriksa presensi datang, padahal guru bisa presensi
+                // pulang dari tempat lain.
+                'pulang_lat' => $p?->pulang_lat,
+                'pulang_lng' => $p?->pulang_lng,
+                'pulang_jarak_m' => $p?->pulang_jarak_m,
+                'pulang_akurasi_m' => $p?->pulang_akurasi_m,
+                'lokasi_pulang' => $p?->pulangLokasi?->nama,
+                'pulang_alasan_luar_radius' => $p?->pulang_alasan_luar_radius,
                 'masuk_status' => $p?->masuk_status,
                 'pulang_status' => $p?->pulang_status,
                 'masuk_validasi' => $p?->masuk_validasi,
@@ -123,6 +134,8 @@ final class MonitoringPresensiService
                 'pengajuan_label' => $i?->labelJenis(),
                 'alasan_luar_radius' => $p?->masuk_alasan_luar_radius,
                 'ada_foto' => $p?->masuk_foto_path !== null,
+                'ada_foto_masuk' => $p?->masuk_foto_path !== null,
+                'ada_foto_pulang' => $p?->pulang_foto_path !== null,
             ];
         }
 
