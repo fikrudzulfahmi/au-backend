@@ -28,6 +28,6 @@ class PutuskanPengajuanRequest extends FormRequest
 
     public function messages(): array
     {
-        return ['catatan_penyetuju.required' => 'Catatan wajib diisi saat menolak pengajuan (FR-IZN-04).'];
+        return ['catatan_penyetuju.required' => 'Catatan wajib diisi saat menolak pengajuan.'];
     }
 }

@@ -70,7 +70,7 @@ class KelasRequest extends FormRequest
                 if ($sudahAda) {
                     $validator->errors()->add(
                         'wali_kelas_id',
-                        "Guru ini sudah menjadi wali kelas {$sudahAda->nama} pada tahun pelajaran yang sama (BR-02)."
+                        "Guru ini sudah menjadi wali kelas {$sudahAda->nama} pada tahun pelajaran yang sama."
                     );
                 }
             },

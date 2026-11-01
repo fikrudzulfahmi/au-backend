@@ -27,7 +27,7 @@ class BersihkanFotoPresensi extends Command
         {--kering : Mode aman — laporkan saja, tidak menghapus apa pun}
         {--dry-run : Sinonim dari --kering}';
 
-    protected $description = 'Menghapus berkas foto presensi & lampiran tahun pelajaran berstatus selesai (BR-30)';
+    protected $description = 'Menghapus berkas foto presensi & lampiran tahun pelajaran berstatus selesai ';
 
     public function handle(RetensiFotoService $retensi, AuditLogService $audit): int
     {
@@ -46,7 +46,7 @@ class BersihkanFotoPresensi extends Command
             }
 
             if (! $tahun->isSelesai()) {
-                $this->warn("Tahun pelajaran {$tahun->nama} berstatus \"{$tahun->status}\", bukan \"selesai\" — tidak ada berkas yang dibersihkan. Berkas tahun yang masih aktif tidak pernah dihapus (BR-30).");
+                $this->warn("Tahun pelajaran {$tahun->nama} berstatus \"{$tahun->status}\", bukan \"selesai\" — tidak ada berkas yang dibersihkan. Berkas tahun yang masih aktif tidak pernah dihapus.");
 
                 return self::SUCCESS;
             }

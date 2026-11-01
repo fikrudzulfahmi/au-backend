@@ -124,7 +124,7 @@ final class LokasiPresensiService
             } catch (QueryException $e) {
                 // Jaring terakhir: indeks unik lokasi_presensi_default_uq.
                 throw AturanBisnisException::konflik(
-                    'Sudah ada lokasi default lain. Lepas default lokasi tersebut terlebih dahulu (BR-12).',
+                    'Sudah ada lokasi default lain. Lepas default lokasi tersebut terlebih dahulu.',
                     'BR-12',
                 );
             }

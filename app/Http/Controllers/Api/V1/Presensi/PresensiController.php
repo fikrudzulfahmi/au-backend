@@ -134,7 +134,7 @@ final class PresensiController extends Controller
     private function pesanMasuk(PresensiPegawai $presensi): string
     {
         if ($presensi->masuk_validasi === PresensiPegawai::MENUNGGU) {
-            return 'Presensi tersimpan dan menunggu persetujuan admin karena Anda berada di luar radius (BR-17).';
+            return 'Presensi tersimpan dan menunggu persetujuan admin karena Anda berada di luar radius.';
         }
 
         if ($presensi->masuk_validasi === PresensiPegawai::DISETUJUI) {

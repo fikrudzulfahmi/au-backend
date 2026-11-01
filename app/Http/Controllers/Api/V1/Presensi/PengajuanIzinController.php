@@ -77,7 +77,7 @@ final class PengajuanIzinController extends Controller
         $pengajuan = $this->pengajuan->buatAtasNama($pegawai, $request->validated(), $request->user());
 
         return response()->json([
-            'message' => 'Pengajuan dibuat atas nama '.$pegawai->nama.' dan langsung disetujui (FR-IZN-08).',
+            'message' => 'Pengajuan dibuat atas nama '.$pegawai->nama.' dan langsung disetujui.',
             'data' => new PengajuanIzinResource($pengajuan->load('pegawai')),
         ], 201);
     }

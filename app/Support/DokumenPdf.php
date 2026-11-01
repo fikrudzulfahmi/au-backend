@@ -164,9 +164,14 @@ final class DokumenPdf
 
         $html .= $this->blokTandaTangan($ttd);
 
-        $kode = trim((string) ($laporan['kode'] ?? ''));
-        if ($kode !== '') {
-            $html .= '<div class="kaki">'.$kode.' — SIPANDU</div>';
+        /*
+         * Kaki dokumen memakai IDENTITAS SEKOLAH, bukan kode kebutuhan internal.
+         * Sebelumnya baris ini mencetak kode seperti "FR-LAP-01 — SIPANDU" pada setiap
+         * PDF laporan; pada dokumen resmi yang diarsipkan, kode itu hanya membingungkan.
+         */
+        $namaSekolah = trim((string) (($konteks['sekolah'] ?? null)->nama_sekolah ?? ''));
+        if ($namaSekolah !== '') {
+            $html .= '<div class="kaki">'.e($namaSekolah).'</div>';
         }
 
         return $html.'</body></html>';

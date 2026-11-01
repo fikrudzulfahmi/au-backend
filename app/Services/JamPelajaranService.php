@@ -55,7 +55,7 @@ final class JamPelajaranService
             $polaLain = PolaJam::find($terpakai->first()->pola_jam_id)?->nama;
 
             throw AturanBisnisException::kumpulan(
-                "Hari berikut sudah dipakai pola lain pada semester ini: {$namaHari}. Satu hari hanya boleh masuk satu pola (BR-05).",
+                "Hari berikut sudah dipakai pola lain pada semester ini: {$namaHari}. Satu hari hanya boleh masuk satu pola.",
                 ["Hari {$namaHari} sudah dipakai pola \"{$polaLain}\"."],
                 'hari',
                 'BR-05',
@@ -142,7 +142,7 @@ final class JamPelajaranService
         // FR-JAM-05 — jam ke- tidak boleh diubah bila slot sudah dipakai jadwal.
         if ($slot !== null && $slot->jam_ke !== $jamKe && $slot->jadwal()->exists()) {
             throw AturanBisnisException::konflik(
-                'Jam ke- tidak dapat diubah karena slot ini sudah dipakai jadwal (FR-JAM-05). Hapus jadwalnya lebih dahulu.',
+                'Jam ke- tidak dapat diubah karena slot ini sudah dipakai jadwal. Hapus jadwalnya lebih dahulu.',
                 'DIPAKAI_JADWAL',
             );
         }
@@ -158,7 +158,7 @@ final class JamPelajaranService
 
             if ($mulai < $lSelesai && $lMulai < $selesai) {
                 throw AturanBisnisException::tolak(
-                    "Slot tumpang tindih dengan \"{$l->label}\" ({$lMulai}–{$lSelesai}). Perbaiki jamnya (FR-JAM-03).",
+                    "Slot tumpang tindih dengan \"{$l->label}\" ({$lMulai}–{$lSelesai}). Perbaiki jamnya.",
                     'jam_mulai',
                 );
             }
@@ -213,7 +213,7 @@ final class JamPelajaranService
 
         if ($jumlah > 0) {
             throw AturanBisnisException::konflik(
-                "Slot ini dipakai oleh {$jumlah} entri jadwal. Hapus jadwalnya lebih dahulu (FR-JAM-05).",
+                "Slot ini dipakai oleh {$jumlah} entri jadwal. Hapus jadwalnya lebih dahulu.",
                 'DIPAKAI_JADWAL',
             );
         }
@@ -256,7 +256,7 @@ final class JamPelajaranService
                 if ($bentrok !== []) {
                     $dilewati[] = [
                         'nama' => $sumber->nama,
-                        'alasan' => 'Hari '.implode(', ', $bentrok).' sudah dipakai pola lain (BR-05).',
+                        'alasan' => 'Hari '.implode(', ', $bentrok).' sudah dipakai pola lain.',
                     ];
 
                     continue;

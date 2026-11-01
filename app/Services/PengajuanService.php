@@ -87,7 +87,7 @@ final class PengajuanService
                 'status' => PengajuanIzin::STATUS_DISETUJUI,
                 'diputuskan_oleh' => $oleh->getKey(),
                 'diputuskan_pada' => $this->waktu->sekarang(),
-                'catatan_penyetuju' => $data['catatan_penyetuju'] ?? 'Dibuat oleh admin (FR-IZN-08).',
+                'catatan_penyetuju' => $data['catatan_penyetuju'] ?? 'Dibuat oleh admin.',
                 'dibuat_oleh_admin' => true,
             ]);
 
@@ -122,7 +122,7 @@ final class PengajuanService
         }
 
         if ($status === PengajuanIzin::STATUS_DITOLAK && ($catatan === null || trim($catatan) === '')) {
-            throw AturanBisnisException::tolak('Catatan wajib diisi saat menolak pengajuan (FR-IZN-04).', 'catatan_penyetuju');
+            throw AturanBisnisException::tolak('Catatan wajib diisi saat menolak pengajuan.', 'catatan_penyetuju');
         }
 
         $lama = $pengajuan->only(['status', 'catatan_penyetuju']);
@@ -163,7 +163,7 @@ final class PengajuanService
     {
         if ($pengajuan->status !== PengajuanIzin::STATUS_MENUNGGU) {
             throw AturanBisnisException::tolak(
-                'Pengajuan hanya dapat dibatalkan selama masih menunggu (FR-IZN-03).',
+                'Pengajuan hanya dapat dibatalkan selama masih menunggu.',
                 'status',
             );
         }
@@ -388,7 +388,7 @@ final class PengajuanService
 
         if ($bentrok !== null) {
             throw AturanBisnisException::tolak(
-                'Sudah ada pengajuan '.$bentrok->labelJenis().' ('.$bentrok->status.') pada rentang tanggal tersebut (FR-IZN-05).',
+                'Sudah ada pengajuan '.$bentrok->labelJenis().' ('.$bentrok->status.') pada rentang tanggal tersebut.',
                 'tanggal_mulai',
                 'IZN-05',
             );
@@ -419,7 +419,7 @@ final class PengajuanService
                     'status' => PengajuanLuarRadius::STATUS_DISETUJUI,
                     'diputuskan_oleh' => $oleh->getKey(),
                     'diputuskan_pada' => $this->waktu->sekarang(),
-                    'catatan_penyetuju' => 'Menyusul dinas yang disetujui (FR-IZN-02).',
+                    'catatan_penyetuju' => 'Menyusul dinas yang disetujui.',
                 ],
             );
 

@@ -57,7 +57,7 @@ final class LokasiPresensiController extends Controller
         $lokasi = $this->lokasi->jadikanDefault($lokasiPresensi, $request->user());
 
         return response()->json([
-            'message' => 'Lokasi default diperbarui. Pegawai tanpa penetapan khusus memakai lokasi ini (BR-12).',
+            'message' => 'Lokasi default diperbarui. Pegawai tanpa penetapan khusus memakai lokasi ini.',
             'data' => new LokasiPresensiResource($lokasi),
         ]);
     }

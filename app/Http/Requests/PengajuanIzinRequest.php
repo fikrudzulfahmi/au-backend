@@ -33,7 +33,7 @@ class PengajuanIzinRequest extends FormRequest
     {
         $validator->after(function ($v): void {
             if ($this->input('presensi_luar_radius') && $this->input('jenis') !== PengajuanIzin::JENIS_DINAS) {
-                $v->errors()->add('presensi_luar_radius', 'Opsi presensi luar radius hanya berlaku untuk pengajuan dinas (FR-IZN-02).');
+                $v->errors()->add('presensi_luar_radius', 'Opsi presensi luar radius hanya berlaku untuk pengajuan dinas.');
             }
         });
     }

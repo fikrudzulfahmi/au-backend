@@ -29,7 +29,7 @@ it('menolak plotting mapel ganda pada semester, mapel, dan kelas yang sama (KP-2
     ]);
 
     $respons->assertStatus(422);
-    expect($respons->json('errors.mapel_id.0'))->toContain('BR-03')
+    expect($respons->json('errors.mapel_id.0'))->toContain('sudah memiliki guru pengampu')
         ->and($respons->json('code'))->toBe('BR-03');
 
     // Plotting lama tidak berubah.
@@ -50,7 +50,7 @@ it('menolak pegawai struktural sebagai pengampu mapel (FR-PLM-03)', function ():
         'mapel_id' => $mapelLain->id,
         'kelas_id' => $a['kelas']->id,
         'jp_per_minggu' => 2,
-    ])->assertStatus(422)->assertJsonPath('errors.pegawai_id.0', 'Hanya pegawai berjenis guru yang dapat menjadi pengampu mapel (FR-PLM-03).');
+    ])->assertStatus(422)->assertJsonPath('errors.pegawai_id.0', 'Hanya pegawai berjenis guru yang dapat menjadi pengampu mapel.');
 });
 
 it('menolak kelas yang bukan bagian dari tahun pelajaran semester tersebut', function (): void {

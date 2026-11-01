@@ -60,7 +60,7 @@ final class PlottingKelasService
                 if ($siswa->status !== 'aktif') {
                     $dilewati[] = [
                         'siswa_id' => $siswaId,
-                        'alasan' => "Status siswa \"{$siswa->status}\" — hanya siswa aktif yang dapat diplot (FR-PLK-07).",
+                        'alasan' => "Status siswa \"{$siswa->status}\" — hanya siswa aktif yang dapat diplot.",
                     ];
 
                     continue;
@@ -74,7 +74,7 @@ final class PlottingKelasService
                 if ($sudahTerplot) {
                     $dilewati[] = [
                         'siswa_id' => $siswaId,
-                        'alasan' => 'Siswa sudah terplot pada tahun pelajaran ini (BR-04).',
+                        'alasan' => 'Siswa sudah terplot pada tahun pelajaran ini.',
                     ];
 
                     continue;

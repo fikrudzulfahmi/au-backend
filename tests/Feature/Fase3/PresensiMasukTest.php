@@ -304,7 +304,7 @@ it('menolak presensi pada hari izin yang disetujui dan menyembunyikan tombolnya 
         ->assertJsonPath('data.boleh_masuk', false)
         ->assertJsonPath('data.pengajuan.jenis', 'izin');
 
-    expect($status->json('data.alasan_tidak_boleh_masuk'))->toContain('BR-25');
+    expect($status->json('data.alasan_tidak_boleh_masuk'))->toContain('presensi tidak diperlukan');
 });
 
 /** BERHALANGAN: dinas disetujui TIDAK membebaskan presensi (BR-25). */

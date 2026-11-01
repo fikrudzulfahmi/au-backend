@@ -35,7 +35,7 @@ it('menolak guru yang sama menjadi wali dua kelas pada tahun pelajaran yang sama
     ]);
 
     $respons->assertStatus(422);
-    expect($respons->json('errors.wali_kelas_id.0'))->toContain('BR-02');
+    expect($respons->json('errors.wali_kelas_id.0'))->toContain('sudah menjadi wali kelas');
     expect(Kelas::count())->toBe(1);
 });
 

@@ -56,7 +56,7 @@ final class JadwalService
 
         if ($slot->pola_jam_id !== $pola->id) {
             throw AturanBisnisException::tolak(
-                'Slot tersebut bukan bagian pola jam untuk hari '.$this->namaHari($hari).' (BR-08).',
+                'Slot tersebut bukan bagian pola jam untuk hari '.$this->namaHari($hari).'.',
                 'slot_jam_id',
                 'BR-08',
             );
@@ -64,7 +64,7 @@ final class JadwalService
 
         if (! $slot->bolehDijadwalkan()) {
             throw AturanBisnisException::tolak(
-                "Slot \"{$slot->label}\" bertipe {$slot->tipe} — hanya slot bertipe pelajaran yang dapat dijadwalkan (BR-08).",
+                "Slot \"{$slot->label}\" bertipe {$slot->tipe} — hanya slot bertipe pelajaran yang dapat dijadwalkan.",
                 'slot_jam_id',
                 'BR-08',
             );
@@ -98,7 +98,7 @@ final class JadwalService
 
             throw AturanBisnisException::tolak(
                 "Bentrok guru: {$plotting->pegawai?->nama} sudah mengajar {$mapelLain} di {$kelasLain} pada "
-                .$this->namaHari($hari)." jam ke-{$slot->jam_ke} (BR-06).",
+.$this->namaHari($hari)." jam ke-{$slot->jam_ke}.",
                 'plotting_mapel_id',
                 'BR-06',
             );
@@ -118,7 +118,7 @@ final class JadwalService
 
             throw AturanBisnisException::tolak(
                 "Bentrok kelas: {$plotting->kelas?->nama} sudah mendapat {$mapelLain} bersama {$guruLain} pada "
-                .$this->namaHari($hari)." jam ke-{$slot->jam_ke} (BR-07).",
+.$this->namaHari($hari)." jam ke-{$slot->jam_ke}.",
                 'plotting_mapel_id',
                 'BR-07',
             );
@@ -130,7 +130,7 @@ final class JadwalService
         if ($terjadwal >= $plotting->jp_per_minggu) {
             throw AturanBisnisException::tolak(
                 "Jadwal untuk {$plotting->mapel?->nama} di {$plotting->kelas?->nama} sudah mencapai "
-                ."{$plotting->jp_per_minggu} JP per minggu (BR-09). Ubah JP per minggu pada plotting bila perlu.",
+."{$plotting->jp_per_minggu} JP per minggu. Ubah JP per minggu pada plotting bila perlu.",
                 'plotting_mapel_id',
                 'BR-09',
             );
@@ -160,7 +160,7 @@ final class JadwalService
             // Jaring terakhir: indeks unik BR-06/BR-07 (mis. dua permintaan bersamaan).
             if ($this->galatDuplikat($e)) {
                 throw AturanBisnisException::konflik(
-                    'Jadwal tidak dapat disimpan karena bentrok dengan jadwal yang baru saja dibuat (BR-06/BR-07). Muat ulang halaman lalu coba lagi.',
+                    'Jadwal tidak dapat disimpan karena bentrok dengan jadwal yang baru saja dibuat (/). Muat ulang halaman lalu coba lagi.',
                     'BENTROK_JADWAL',
                 );
             }

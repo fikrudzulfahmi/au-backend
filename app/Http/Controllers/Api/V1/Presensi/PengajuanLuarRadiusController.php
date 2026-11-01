@@ -58,7 +58,7 @@ final class PengajuanLuarRadiusController extends Controller
         $pengajuan = $this->pengajuan->ajukanLuarRadius($pegawai, $request->validated(), $request->user());
 
         return response()->json([
-            'message' => 'Pengajuan presensi luar radius terkirim. Setelah disetujui, presensi pada tanggal itu otomatis sah (BR-17 Jalur A).',
+            'message' => 'Pengajuan presensi luar radius terkirim. Setelah disetujui, presensi pada tanggal itu otomatis sah (Jalur A).',
             'data' => new PengajuanLuarRadiusResource($pengajuan->load('pegawai')),
         ], 201);
     }

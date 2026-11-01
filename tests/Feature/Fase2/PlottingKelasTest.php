@@ -35,7 +35,7 @@ it('menolak siswa terplot pada dua kelas di tahun pelajaran yang sama (KP-2.1/BR
     ]);
 
     $respons->assertOk()->assertJsonPath('data.dibuat', 0);
-    expect($respons->json('data.dilewati.0.alasan'))->toContain('BR-04');
+    expect($respons->json('data.dilewati.0.alasan'))->toContain('sudah terplot pada tahun pelajaran ini');
 
     // Hanya satu baris plotting yang boleh ada.
     expect(PlottingKelas::where('siswa_id', $siswa->id)->count())->toBe(1)

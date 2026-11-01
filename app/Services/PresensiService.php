@@ -70,7 +70,7 @@ final class PresensiService
         // BR-10 — presensi masuk satu kali per hari, kecuali yang sebelumnya ditolak
         // (FR-PRS-07: setelah ditolak pegawai boleh presensi ulang pada hari yang sama).
         if ($presensi !== null && $presensi->sudahMasuk() && $presensi->masuk_validasi !== PresensiPegawai::DITOLAK) {
-            throw AturanBisnisException::tolak('Anda sudah melakukan presensi masuk hari ini (BR-10).', 'foto', 'BR-10');
+            throw AturanBisnisException::tolak('Anda sudah melakukan presensi masuk hari ini.', 'foto', 'BR-10');
         }
 
         $this->pastikanPresensiDibuka($pegawai, $sekarang);
@@ -137,11 +137,11 @@ final class PresensiService
             ->first();
 
         if ($presensi === null || ! $presensi->sudahMasuk()) {
-            throw AturanBisnisException::tolak('Lakukan presensi masuk terlebih dahulu (BR-10).', 'foto', 'BR-10');
+            throw AturanBisnisException::tolak('Lakukan presensi masuk terlebih dahulu.', 'foto', 'BR-10');
         }
 
         if ($presensi->sudahPulang() && $presensi->pulang_validasi !== PresensiPegawai::DITOLAK) {
-            throw AturanBisnisException::tolak('Anda sudah melakukan presensi pulang hari ini (BR-10).', 'foto', 'BR-10');
+            throw AturanBisnisException::tolak('Anda sudah melakukan presensi pulang hari ini.', 'foto', 'BR-10');
         }
 
         $masukan = $this->siapkanMasukan($data, false);
@@ -245,7 +245,7 @@ final class PresensiService
     public function koreksi(PresensiPegawai $presensi, array $data, User $oleh, string $alasan): PresensiPegawai
     {
         if (trim($alasan) === '') {
-            throw AturanBisnisException::tolak('Alasan koreksi wajib diisi (FR-PRS-13).', 'alasan');
+            throw AturanBisnisException::tolak('Alasan koreksi wajib diisi.', 'alasan');
         }
 
         $lama = $presensi->only([
@@ -306,7 +306,7 @@ final class PresensiService
 
         if ($izin !== null) {
             $bolehMasuk = false;
-            $alasanMasuk = 'Hari ini tercatat '.$izin->labelJenis().' yang disetujui — presensi tidak diperlukan (BR-25).';
+            $alasanMasuk = 'Hari ini tercatat '.$izin->labelJenis().' yang disetujui — presensi tidak diperlukan.';
         } elseif ($aturan === null || ! $aturan->is_hari_kerja) {
             $bolehMasuk = false;
             $alasanMasuk = 'Hari ini bukan hari kerja menurut jam kerja.';
@@ -366,7 +366,7 @@ final class PresensiService
         // KP-3.1 — presensi tanpa GPS ditolak.
         if ($lat === null || $lng === null || $lat === '' || $lng === '') {
             throw AturanBisnisException::tolak(
-                'Koordinat GPS tidak terbaca. Aktifkan izin lokasi lalu coba lagi (KP-3.1).',
+                'Koordinat GPS tidak terbaca. Aktifkan izin lokasi lalu coba lagi.',
                 'lat',
                 'GPS-WAJIB',
             );
@@ -375,7 +375,7 @@ final class PresensiService
         // KP-3.1 — presensi tanpa foto dari kamera ditolak.
         if (($data['foto'] ?? null) === null) {
             throw AturanBisnisException::tolak(
-                'Foto presensi wajib diambil dari kamera (KP-3.1, BR-29).',
+                'Foto presensi wajib diambil dari kamera.',
                 'foto',
                 'FOTO-WAJIB',
             );
@@ -403,7 +403,7 @@ final class PresensiService
 
         if ($akurasi > $batas) {
             throw AturanBisnisException::tolak(
-                "Akurasi GPS saat ini ±{$akurasi} m, melebihi batas {$batas} m. Cari tempat terbuka lalu coba lagi (FR-PRS-06).",
+                "Akurasi GPS saat ini ±{$akurasi} m, melebihi batas {$batas} m. Cari tempat terbuka lalu coba lagi.",
                 'akurasi_m',
                 'AKURASI-GPS',
             );
@@ -451,7 +451,7 @@ final class PresensiService
 
         if ($izin !== null) {
             throw AturanBisnisException::tolak(
-                'Hari ini Anda tercatat '.$izin->labelJenis().' yang disetujui, sehingga presensi tidak diperlukan (BR-25).',
+                'Hari ini Anda tercatat '.$izin->labelJenis().' yang disetujui, sehingga presensi tidak diperlukan.',
                 'foto',
                 'BR-25',
             );
@@ -531,7 +531,7 @@ final class PresensiService
         // BR-17 Jalur B — diterima tetapi menunggu keputusan admin, alasan wajib.
         if ($alasan === null) {
             throw AturanBisnisException::tolak(
-                'Anda berada di luar radius semua lokasi presensi. Isi alasan agar presensi dapat ditinjau admin (BR-17).',
+                'Anda berada di luar radius semua lokasi presensi. Isi alasan agar presensi dapat ditinjau admin.',
                 'alasan',
                 'ALASAN-WAJIB',
             );
@@ -607,7 +607,7 @@ final class PresensiService
         float $lng,
     ): string {
         if ($foto === null) {
-            throw AturanBisnisException::tolak('Foto presensi wajib diambil dari kamera (BR-29).', 'foto', 'FOTO-WAJIB');
+            throw AturanBisnisException::tolak('Foto presensi wajib diambil dari kamera.', 'foto', 'FOTO-WAJIB');
         }
 
         $teks = $pegawai->nama."\n"

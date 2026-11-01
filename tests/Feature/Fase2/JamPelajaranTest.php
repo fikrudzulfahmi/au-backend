@@ -209,7 +209,7 @@ it('menyalin pola jam beserta slotnya dan melewati hari yang bentrok (FR-JAM-04)
     ]);
 
     $respons->assertOk()->assertJsonPath('data.dibuat', 0);
-    expect($respons->json('data.dilewati.0.alasan'))->toContain('BR-05');
+    expect($respons->json('data.dilewati.0.alasan'))->toContain('sudah dipakai pola lain');
 
     // Tanpa bentrok hari, penyalinan berhasil beserta slotnya.
     // Tujuan kedua memakai tahun pelajaran lain, karena satu tahun pelajaran hanya

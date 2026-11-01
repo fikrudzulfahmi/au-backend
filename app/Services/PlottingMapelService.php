@@ -33,7 +33,7 @@ final class PlottingMapelService
 
         if ($bentrok) {
             throw AturanBisnisException::tolak(
-                "Mapel {$mapel->nama} di kelas {$kelas->nama} sudah memiliki guru pengampu pada semester ini (BR-03). Hapus plotting lama lebih dahulu.",
+                "Mapel {$mapel->nama} di kelas {$kelas->nama} sudah memiliki guru pengampu pada semester ini. Hapus plotting lama lebih dahulu.",
                 'mapel_id',
                 'BR-03',
             );
@@ -104,7 +104,7 @@ final class PlottingMapelService
 
         if ($jumlah > 0) {
             throw AturanBisnisException::konflik(
-                "Plotting ini dipakai oleh {$jumlah} entri jadwal. Hapus jadwalnya lebih dahulu (FR-PLM-06).",
+                "Plotting ini dipakai oleh {$jumlah} entri jadwal. Hapus jadwalnya lebih dahulu.",
                 'DIPAKAI_JADWAL',
             );
         }
@@ -189,7 +189,7 @@ final class PlottingMapelService
     {
         if ($guru->jenis_pegawai !== Pegawai::JENIS_GURU) {
             throw AturanBisnisException::tolak(
-                'Hanya pegawai berjenis guru yang dapat menjadi pengampu mapel (FR-PLM-03).',
+                'Hanya pegawai berjenis guru yang dapat menjadi pengampu mapel.',
                 'pegawai_id',
             );
         }

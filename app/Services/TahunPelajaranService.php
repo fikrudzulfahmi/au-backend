@@ -147,8 +147,8 @@ class TahunPelajaranService
                 'kelas' => $tujuan->kelas()->count(),
             ],
             'ditunda' => [
-                'Plotting mapel disalin pada Fase 2 (FR-PLM-05).',
-                'Pola jam & jadwal disalin pada Fase 2 (FR-JAM-04, FR-TP-06).',
+                'Plotting mapel disalin pada Fase 2.',
+                'Pola jam & jadwal disalin pada Fase 2.',
             ],
         ];
     }

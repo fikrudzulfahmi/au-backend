@@ -54,7 +54,7 @@ it('menolak opsi luar radius pada jenis selain dinas (FR-IZN-02)', function (): 
         'tanggal_selesai' => seninUji(),
         'alasan' => 'Keperluan pribadi.',
         'presensi_luar_radius' => true,
-    ])->assertStatus(422)->assertJsonPath('errors.presensi_luar_radius.0', 'Opsi presensi luar radius hanya berlaku untuk pengajuan dinas (FR-IZN-02).');
+    ])->assertStatus(422)->assertJsonPath('errors.presensi_luar_radius.0', 'Opsi presensi luar radius hanya berlaku untuk pengajuan dinas.');
 });
 
 /** FR-IZN-05 — pengajuan tidak boleh bertumpuk tanggal. */
@@ -113,7 +113,7 @@ it('menyetujui dan menolak pengajuan dengan aturan catatan (FR-IZN-04)', functio
 
     $this->actingAs($admin)->patchJson("/api/v1/pengajuan-izin/{$ditolak->id}/putuskan", [
         'status' => 'ditolak',
-    ])->assertStatus(422)->assertJsonPath('errors.catatan_penyetuju.0', 'Catatan wajib diisi saat menolak pengajuan (FR-IZN-04).');
+    ])->assertStatus(422)->assertJsonPath('errors.catatan_penyetuju.0', 'Catatan wajib diisi saat menolak pengajuan.');
 
     // Dengan catatan berhasil.
     $this->actingAs($admin)->patchJson("/api/v1/pengajuan-izin/{$ditolak->id}/putuskan", [
