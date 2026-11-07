@@ -15,6 +15,7 @@ use App\Models\Role;
 use App\Services\PengajuanService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * FR-IZN-01..09 — pengajuan izin/sakit/dinas/cuti.
@@ -38,6 +39,10 @@ final class PengajuanIzinController extends Controller
             ->with(['pegawai', 'diputuskanOleh'])
             ->when(! $bolehSemua, fn ($q) => $q->where('pegawai_id', $user->pegawai_id))
             ->when($bolehSemua && $request->filled('pegawai_id'), fn ($q) => $q->where('pegawai_id', $request->integer('pegawai_id')))
+            ->when($request->filled('nama'), function ($q) use ($request): void {
+                $cari = trim((string) $request->string('nama'));
+                $q->whereHas('pegawai', fn ($p) => $p->where('nama', 'like', '%'.$cari.'%')->orWhere('nip', 'like', '%'.$cari.'%'));
+            })
             ->when($request->filled('jenis'), fn ($q) => $q->where('jenis', $request->string('jenis')))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->when($request->filled('dari'), fn ($q) => $q->whereDate('tanggal_selesai', '>=', $request->date('dari')))
@@ -46,20 +51,23 @@ final class PengajuanIzinController extends Controller
 
         $daftar = $kueri->paginate($this->perHalaman($request));
 
-        // Inject lampiran base64 untuk preview inline (gambar saja, PDF tetap download)
+        // Tandai keberadaan berkas + MIME agar frontend bisa preview inline.
+        // Disk `local` berakar di storage/app/private — jangan pakai storage_path('app/...').
         $items = $daftar->items();
         foreach ($items as $item) {
-            if ($item->lampiran_path !== null && $item->lampiran_dihapus_pada === null) {
-                $path = storage_path('app/'.$item->lampiran_path);
-                if (file_exists($path)) {
-                    $mime = mime_content_type($path);
-                    // Hanya inject base64 untuk gambar (max 2MB agar tidak membebani response)
-                    if (str_starts_with($mime, 'image/') && filesize($path) <= 2 * 1024 * 1024) {
-                        $item->lampiran_base64 = base64_encode(file_get_contents($path));
-                        $item->lampiran_mime = $mime;
-                    }
-                }
+            $item->berkas_ada = false;
+            $item->lampiran_mime = null;
+
+            if ($item->lampiran_path === null || $item->lampiran_dihapus_pada !== null) {
+                continue;
             }
+
+            if (! Storage::disk('local')->exists($item->lampiran_path)) {
+                continue;
+            }
+
+            $item->berkas_ada = true;
+            $item->lampiran_mime = Storage::disk('local')->mimeType($item->lampiran_path) ?: null;
         }
 
         return response()->json([
@@ -166,7 +174,7 @@ final class PengajuanIzinController extends Controller
             return response()->json(['message' => 'Lampiran tidak tersedia.'], 404);
         }
 
-        $path = storage_path('app/'.$pengajuanIzin->lampiran_path);
+        $path = Storage::disk('local')->path($pengajuanIzin->lampiran_path);
 
         if (! file_exists($path)) {
             return response()->json(['message' => 'Berkas lampiran tidak ditemukan.'], 404);
