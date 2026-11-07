@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Laporan;
 
 use App\Models\HariLibur;
+use App\Models\JadwalWfa;
 use App\Models\JamKerja;
 use App\Models\Pegawai;
 use App\Models\PengajuanIzin;
@@ -68,6 +69,7 @@ final class LaporanPresensiService
             ->groupBy('pegawai_id');
 
         $aturanJam = $this->petaJamKerja();
+        $wfa = $this->petaWfa($id);
         $libur = $this->daftarLibur($semester);
         $hariIni = CarbonImmutable::now()->startOfDay();
         $tanggalPeriode = $periode->tanggal();
@@ -97,6 +99,7 @@ final class LaporanPresensiService
                 /** @var PresensiPegawai|null $presensiHari */
                 $presensiHari = $punyaPresensi->get($t->toDateString());
                 $izinHari = $punyaIzin->first(fn (PengajuanIzin $i): bool => $i->mencakupTanggal($t));
+                $wfaHari = $wfa->get($orang->getKey().'-'.$t->dayOfWeekIso);
 
                 if ($presensiHari !== null && $this->presensiDihitung($presensiHari)) {
                     if ($presensiHari->masuk_status === PresensiPegawai::STATUS_TERLAMBAT) {
@@ -125,13 +128,17 @@ final class LaporanPresensiService
                     }
                 } elseif ($izinHari !== null) {
                     $kolom[$izinHari->jenis]++;
+                } elseif ($wfaHari !== null && $wfaHari->isPenuh()) {
+                    // WFA penuh diset admin = hari itu tidak menuntut presensi,
+                    // jadi TIDAK dihitung alpa (opsi a).
+                    $kolom['wfa']++;
                 } else {
                     $kolom['alpa']++;
                 }
             }
 
-            $kolom['persen_kehadiran'] = $kolom['hari_kerja'] > 0
-                ? round(100 * ($kolom['hadir'] + $kolom['terlambat']) / $kolom['hari_kerja'], 1)
+            $kolom['persen_kehadiran'] = ($kolom['hari_kerja'] - $kolom['wfa']) > 0
+                ? round(100 * ($kolom['hadir'] + $kolom['terlambat']) / ($kolom['hari_kerja'] - $kolom['wfa']), 1)
                 : null;
 
             foreach ($kolom as $kunci => $nilai) {
@@ -157,12 +164,12 @@ final class LaporanPresensiService
             'kolom' => [
                 'NIP', 'Nama', 'Hari Kerja', 'Hadir', 'Terlambat', 'Menit Terlambat',
                 'Pulang Cepat', 'Tanpa Presensi Pulang', 'Izin', 'Sakit', 'Dinas',
-                'Cuti', 'Alpa', 'Luar Radius', 'Kehadiran (%)',
+                'Cuti', 'WFA', 'Alpa', 'Luar Radius', 'Kehadiran (%)',
             ],
             'baris' => array_map(fn (array $b): array => [
                 $b['nip'], $b['nama'], $b['hari_kerja'], $b['hadir'], $b['terlambat'],
                 $b['menit_terlambat'], $b['pulang_cepat'], $b['tidak_presensi_pulang'],
-                $b['izin'], $b['sakit'], $b['dinas'], $b['cuti'], $b['alpa'],
+                $b['izin'], $b['sakit'], $b['dinas'], $b['cuti'], $b['wfa'], $b['alpa'],
                 $b['luar_radius'], $b['persen_kehadiran'],
             ], $baris),
             'pegawai' => $baris,
@@ -338,6 +345,7 @@ final class LaporanPresensiService
             ->groupBy(fn (PengajuanIzin $i): int => (int) $i->pegawai_id);
 
         $aturanJam = $this->petaJamKerja();
+        $wfa = $this->petaWfa($id);
         $libur = $this->daftarLibur($semester);
         $hariIni = CarbonImmutable::now()->startOfDay();
 
@@ -391,6 +399,11 @@ final class LaporanPresensiService
                     $masuk = null;
                     $pulang = null;
                     $teks = $izinHari->labelJenis();
+                } elseif (($wfa->get($orang->getKey().'-'.$t->dayOfWeekIso))?->isPenuh()) {
+                    // WFA penuh: hari kerja tapi tidak ada kewajiban presensi.
+                    $masuk = null;
+                    $pulang = null;
+                    $teks = 'WFA';
                 } else {
                     $masuk = null;
                     $pulang = null;
@@ -580,9 +593,19 @@ final class LaporanPresensiService
             'sakit' => 0,
             'dinas' => 0,
             'cuti' => 0,
+            'wfa' => 0,
             'alpa' => 0,
             'luar_radius' => 0,
         ];
+    }
+
+    /** @return Collection<string, JadwalWfa> kunci "pegawai_id-hari" */
+    private function petaWfa(array $pegawaiIds): Collection
+    {
+        return JadwalWfa::query()
+            ->whereIn('pegawai_id', $pegawaiIds)
+            ->get()
+            ->keyBy(fn (JadwalWfa $w): string => $w->pegawai_id.'-'.$w->hari);
     }
 
     /** Presensi yang dihitung hadir: masuk ada dan validasinya termasuk dihitung (BR-18). */

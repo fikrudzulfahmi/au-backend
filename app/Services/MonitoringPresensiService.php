@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Models\JadwalWfa;
 use App\Models\JamKerja;
 use App\Models\Pegawai;
 use App\Models\PengajuanIzin;
@@ -33,6 +34,8 @@ final class MonitoringPresensiService
 
     public const TIDAK_PRESENSI_PULANG = 'tidak_presensi_pulang';
 
+    public const WFA = 'wfa';
+
     /** @var array<string, string> */
     public const DAFTAR_STATUS = [
         self::BELUM_PRESENSI => 'Belum Presensi',
@@ -42,6 +45,7 @@ final class MonitoringPresensiService
         self::MENUNGGU => 'Menunggu Persetujuan',
         self::LUAR_RADIUS => 'Luar Radius',
         self::TIDAK_PRESENSI_PULANG => 'Tidak Presensi Pulang',
+        self::WFA => 'WFA',
     ];
 
     public function __construct(private readonly JamKerjaService $jamKerja) {}
@@ -75,15 +79,20 @@ final class MonitoringPresensiService
             ->keyBy('pegawai_id');
 
         $libur = $this->jamKerja->hariLibur($saat);
+        $wfa = JadwalWfa::query()
+            ->where('hari', $saat->dayOfWeekIso)
+            ->get()
+            ->keyBy('pegawai_id');
         $baris = [];
         $ringkasan = array_fill_keys(array_keys(self::DAFTAR_STATUS), 0);
 
         foreach ($pegawai as $orang) {
             $p = $presensi->get($orang->getKey());
             $i = $izin->get($orang->getKey());
+            $w = $wfa->get($orang->getKey());
             $aturan = $this->jamKerja->untuk($orang->jenis_pegawai, $saat->dayOfWeekIso);
 
-            $kategori = $this->kategori($p, $i, $aturan?->is_hari_kerja ?? false, $libur);
+            $kategori = $this->kategori($p, $i, $aturan?->is_hari_kerja ?? false, $libur, $w);
             $ringkasan[$kategori]++;
 
             $baris[] = [
@@ -97,6 +106,16 @@ final class MonitoringPresensiService
                 'hari_kerja' => (bool) ($aturan?->is_hari_kerja ?? false) && ! $libur,
                 'jam_masuk' => $aturan?->jam_masuk,
                 'jam_pulang' => $aturan?->jam_pulang,
+                // WFA: status tetap mengikuti kategori biasa (mis. "Belum Presensi"),
+                // badge di bawah ini yang menjelaskan mengapa.
+                'wfa_jenis' => $w?->jenis,
+                'wfa_label' => $w === null ? null : (JadwalWfa::DAFTAR_JENIS[$w->jenis] ?? $w->jenis),
+                'wfa_jam_masuk' => $w?->jam_masuk,
+                'wfa_keterangan' => $w?->keterangan,
+                // Batas masuk yang benar-benar berlaku hari itu (WFA sebagian menimpa jam kerja).
+                'jam_masuk_efektif' => ($w !== null && $w->isSebagian() && $w->jam_masuk !== null)
+                    ? $w->jam_masuk
+                    : $aturan?->jam_masuk,
                 'presensi_id' => $p?->getKey(),
                 'masuk_jam' => $p?->masuk_waktu?->format('H:i'),
                 'masuk_lat' => $p?->masuk_lat,
@@ -166,11 +185,12 @@ final class MonitoringPresensiService
 
     /** Kategori status satu pegawai (FR-PRS-10). */
     private function kategori(
-        ?PresensiPegawai $presensi,
-        ?PengajuanIzin $izin,
-        bool $hariKerja,
-        bool $libur,
-    ): string {
+            ?PresensiPegawai $presensi,
+            ?PengajuanIzin $izin,
+            bool $hariKerja,
+            bool $libur,
+            ?JadwalWfa $wfa = null
+        ): string {
         // Hari libur atau bukan hari kerja: tidak ada kewajiban presensi.
         if ($libur || ! $hariKerja) {
             return $presensi?->sudahMasuk() ? self::HADIR : self::BELUM_PRESENSI;
@@ -179,6 +199,11 @@ final class MonitoringPresensiService
         // BR-25 — izin/sakit/cuti disetujui membebaskan presensi dan bukan alpa.
         if ($izin !== null && in_array($izin->jenis, PengajuanIzin::JENIS_MEMBEBASKAN, true)) {
             return self::BERHALANGAN;
+        }
+
+        // BR-WFA-01 — jika hari ini WFA penuh, presensi dibebaskan, status WFA (bukan alpa).
+        if ($wfa !== null && $wfa->isPenuh()) {
+            return self::WFA;
         }
 
         if ($presensi === null || ! $presensi->sudahMasuk()) {

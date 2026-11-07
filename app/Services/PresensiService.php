@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Exceptions\AturanBisnisException;
 use App\Models\HariLibur;
+use App\Models\JadwalWfa;
 use App\Models\JamKerja;
 use App\Models\LokasiPresensi;
 use App\Models\Pegawai;
@@ -47,6 +48,7 @@ final class PresensiService
         private readonly AuditLogService $audit,
         private readonly JamKerjaService $jamKerja,
         private readonly LokasiPresensiService $lokasi,
+        private readonly JadwalWfaService $wfa,
     ) {}
 
     /**
@@ -61,6 +63,7 @@ final class PresensiService
 
         $this->pastikanHariKerja($pegawai, $sekarang);
         $this->pastikanIzinTidakMembebaskan($pegawai, $tanggal);
+        $this->pastikanWfaTidakMembebaskan($pegawai, $sekarang);
 
         $presensi = PresensiPegawai::query()
             ->where('pegawai_id', $pegawai->getKey())
@@ -300,6 +303,9 @@ final class PresensiService
             ->first();
 
         $izin = $this->izinMembebaskan($pegawai, $tanggal);
+        $wfa = $this->wfa->untuk($pegawai->getKey(), $sekarang->dayOfWeekIso);
+        $wfaPenuh = $wfa !== null && $wfa->isPenuh();
+        $wfaSebagian = $wfa !== null && $wfa->isSebagian();
 
         $bolehMasuk = true;
         $alasanMasuk = null;
@@ -307,6 +313,9 @@ final class PresensiService
         if ($izin !== null) {
             $bolehMasuk = false;
             $alasanMasuk = 'Hari ini tercatat '.$izin->labelJenis().' yang disetujui — presensi tidak diperlukan.';
+        } elseif ($wfaPenuh) {
+            $bolehMasuk = false;
+            $alasanMasuk = 'Hari ini Anda dijadwalkan WFA Penuh — presensi tidak diperlukan.';
         } elseif ($aturan === null || ! $aturan->is_hari_kerja) {
             $bolehMasuk = false;
             $alasanMasuk = 'Hari ini bukan hari kerja menurut jam kerja.';
@@ -330,8 +339,16 @@ final class PresensiService
             'is_hari_kerja' => $aturan?->is_hari_kerja ?? false,
             'hari_libur' => $libur?->keterangan,
             'buka_presensi' => $aturan?->buka_presensi,
-            'jam_masuk' => $aturan?->jam_masuk,
+            // WFA sebagian menggeser batas masuk yang ditampilkan ke pegawai.
+            'jam_masuk' => $wfaSebagian ? $wfa->jam_masuk : $aturan?->jam_masuk,
             'jam_pulang' => $aturan?->jam_pulang,
+            'jam_masuk_standar' => $aturan?->jam_masuk,
+            'wfa' => $wfa === null ? null : [
+                'jenis' => $wfa->jenis,
+                'label_jenis' => JadwalWfa::DAFTAR_JENIS[$wfa->jenis] ?? $wfa->jenis,
+                'jam_masuk' => $wfa->jam_masuk,
+                'keterangan' => $wfa->keterangan,
+            ],
             'presensi' => $presensi,
             'pengajuan' => $izin,
             'boleh_masuk' => $bolehMasuk,
@@ -458,6 +475,23 @@ final class PresensiService
         }
     }
 
+    /**
+     * WFA penuh — seperti izin/sakit/cuti: presensi tidak diperlukan pada hari itu.
+     * WFA sebagian TIDAK membebaskan; ia hanya menggeser batas jam masuk.
+     */
+    private function pastikanWfaTidakMembebaskan(Pegawai $pegawai, CarbonImmutable $sekarang): void
+    {
+        $wfa = $this->wfa->untuk($pegawai->getKey(), $sekarang->dayOfWeekIso);
+
+        if ($wfa !== null && $wfa->isPenuh()) {
+            throw AturanBisnisException::tolak(
+                'Hari ini Anda dijadwalkan WFA Penuh, sehingga presensi tidak diperlukan.',
+                'foto',
+                'WFA-PENUH',
+            );
+        }
+    }
+
     private function izinMembebaskan(Pegawai $pegawai, string $tanggal): ?PengajuanIzin
     {
         return PengajuanIzin::query()
@@ -549,12 +583,20 @@ final class PresensiService
      * BR-15 — terlambat bila waktu server > jam_masuk, TANPA toleransi.
      * Menit terlambat dibulatkan ke atas.
      *
+     * WFA sebagian menggeser batas masuk: bila pegawai punya jadwal WFA sebagian
+     * pada hari itu, `jam_masuk` WFA yang dipakai, bukan `jam_kerja`.
+     *
      * @return array{status: string, menit: int}
      */
     private function statusMasuk(Pegawai $pegawai, CarbonImmutable $sekarang): array
     {
-        $aturan = $this->jamKerja->untuk($pegawai->jenis_pegawai, $sekarang->dayOfWeekIso);
-        $batas = $aturan?->jam_masuk;
+        $wfa = $this->wfa->untuk($pegawai->getKey(), $sekarang->dayOfWeekIso);
+
+        // WFA sebagian menang atas jam kerja; WFA penuh tidak sampai ke sini
+        // karena presensi sudah ditolak lebih awal.
+        $batas = $wfa !== null && $wfa->isSebagian()
+            ? $wfa->jam_masuk
+            : $this->jamKerja->untuk($pegawai->jenis_pegawai, $sekarang->dayOfWeekIso)?->jam_masuk;
 
         if ($batas === null) {
             return ['status' => PresensiPegawai::STATUS_HADIR, 'menit' => 0];

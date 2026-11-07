@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\V1\Master\SemesterController;
 use App\Http\Controllers\Api\V1\Master\SiswaController;
 use App\Http\Controllers\Api\V1\Master\TahunPelajaranController;
 use App\Http\Controllers\Api\V1\Pengaturan\AuditLogController;
+use App\Http\Controllers\Api\V1\Pengaturan\JadwalWfaController;
 use App\Http\Controllers\Api\V1\Pengaturan\PenandatanganController;
 use App\Http\Controllers\Api\V1\Pengaturan\PengaturanSekolahController;
 use App\Http\Controllers\Api\V1\Pengaturan\PengaturanTtdController;
@@ -338,6 +339,16 @@ Route::prefix('v1')->group(function (): void {
         Route::middleware('peran:admin')->prefix('jam-kerja')->group(function (): void {
             Route::get('/', [JamKerjaController::class, 'index']);
             Route::post('/', [JamKerjaController::class, 'simpan']);
+        });
+
+        // FR-WFA — jadwal Work From Anywhere per pegawai. Admin saja: penetapan ini
+        // membebaskan presensi (jenis `penuh`) atau menggeser batas masuk (`sebagian`).
+        Route::middleware('peran:admin')->prefix('jadwal-wfa')->group(function (): void {
+            Route::get('/', [JadwalWfaController::class, 'index']);
+            Route::post('/', [JadwalWfaController::class, 'store']);
+            Route::get('/pegawai/{pegawai}', [JadwalWfaController::class, 'show'])->whereNumber('pegawai');
+            Route::delete('/pegawai/{pegawai}/hari/{hari}', [JadwalWfaController::class, 'destroy'])
+                ->whereNumber('pegawai')->whereNumber('hari');
         });
 
         /* --------------------------------- jurnal & presensi siswa (FR-JRN) */
