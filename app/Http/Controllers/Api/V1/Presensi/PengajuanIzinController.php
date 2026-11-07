@@ -129,4 +129,33 @@ final class PengajuanIzinController extends Controller
             'data' => new PengajuanIzinResource($pengajuan->load('pegawai')),
         ]);
     }
+
+    /** Unduh lampiran pengajuan (surat dokter/tugas). */
+    public function lampiran(Request $request, PengajuanIzin $pengajuanIzin): mixed
+    {
+        $user = $this->pengguna($request);
+
+        // Hanya milik sendiri atau admin/kepala sekolah yang boleh unduh.
+        $milikSendiri = $user->pegawai_id !== null && (int) $user->pegawai_id === (int) $pengajuanIzin->pegawai_id;
+        $bolehLihat = $milikSendiri
+            || $user->punyaPeran(Role::ADMIN)
+            || $user->punyaPeran(Role::KEPALA_SEKOLAH)
+            || $user->punyaPeran(Role::WAKASEK_KURIKULUM);
+
+        if (! $bolehLihat) {
+            return response()->json(['message' => 'Anda tidak berhak mengakses lampiran ini.'], 403);
+        }
+
+        if ($pengajuanIzin->lampiran_path === null || $pengajuanIzin->lampiran_dihapus_pada !== null) {
+            return response()->json(['message' => 'Lampiran tidak tersedia.'], 404);
+        }
+
+        $path = storage_path('app/'.$pengajuanIzin->lampiran_path);
+
+        if (! file_exists($path)) {
+            return response()->json(['message' => 'Berkas lampiran tidak ditemukan.'], 404);
+        }
+
+        return response()->file($path);
+    }
 }

@@ -31,6 +31,9 @@ class PengajuanIzinResource extends JsonResource
                 : null,
             'alasan' => $this->alasan,
             'ada_lampiran' => $this->lampiran_path !== null && $this->lampiran_dihapus_pada === null,
+            'lampiran_url' => ($this->lampiran_path !== null && $this->lampiran_dihapus_pada === null)
+                ? url("/api/v1/pengajuan-izin/{$this->id}/lampiran")
+                : null,
             'presensi_luar_radius' => (bool) $this->presensi_luar_radius,
             'status' => $this->status,
             'label_status' => PengajuanIzin::DAFTAR_STATUS[$this->status] ?? $this->status,

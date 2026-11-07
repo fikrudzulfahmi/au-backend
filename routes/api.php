@@ -284,6 +284,7 @@ Route::prefix('v1')->group(function (): void {
         Route::prefix('pengajuan-izin')->group(function (): void {
             Route::get('/', [PengajuanIzinController::class, 'index']);
             Route::post('/', [PengajuanIzinController::class, 'store']);
+            Route::get('/{pengajuanIzin}/lampiran', [PengajuanIzinController::class, 'lampiran']);
             Route::patch('/{pengajuanIzin}/batalkan', [PengajuanIzinController::class, 'batalkan']);
 
             // FR-IZN-08 — admin membuat pengajuan atas nama pegawai.
