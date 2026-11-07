@@ -46,8 +46,24 @@ final class PengajuanIzinController extends Controller
 
         $daftar = $kueri->paginate($this->perHalaman($request));
 
+        // Inject lampiran base64 untuk preview inline (gambar saja, PDF tetap download)
+        $items = $daftar->items();
+        foreach ($items as $item) {
+            if ($item->lampiran_path !== null && $item->lampiran_dihapus_pada === null) {
+                $path = storage_path('app/'.$item->lampiran_path);
+                if (file_exists($path)) {
+                    $mime = mime_content_type($path);
+                    // Hanya inject base64 untuk gambar (max 2MB agar tidak membebani response)
+                    if (str_starts_with($mime, 'image/') && filesize($path) <= 2 * 1024 * 1024) {
+                        $item->lampiran_base64 = base64_encode(file_get_contents($path));
+                        $item->lampiran_mime = $mime;
+                    }
+                }
+            }
+        }
+
         return response()->json([
-            'data' => PengajuanIzinResource::collection($daftar->items()),
+            'data' => PengajuanIzinResource::collection($items),
             'meta' => [
                 'page' => $daftar->currentPage(),
                 'per_page' => $daftar->perPage(),
