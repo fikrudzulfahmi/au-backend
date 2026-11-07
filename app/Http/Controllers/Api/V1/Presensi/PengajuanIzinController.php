@@ -12,10 +12,12 @@ use App\Http\Resources\PengajuanIzinResource;
 use App\Models\Pegawai;
 use App\Models\PengajuanIzin;
 use App\Models\Role;
+use App\Services\Laporan\DokumenResmiService;
 use App\Services\PengajuanService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * FR-IZN-01..09 — pengajuan izin/sakit/dinas/cuti.
@@ -25,10 +27,13 @@ final class PengajuanIzinController extends Controller
 {
     use MemakaiPegawai;
 
-    public function __construct(private readonly PengajuanService $pengajuan) {}
+    public function __construct(
+        private readonly PengajuanService $pengajuan,
+        private readonly DokumenResmiService $dokumen,
+    ) {}
 
     /** FR-IZN-09 — pegawai melihat riwayatnya; pemantau dapat melihat semua. */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request): JsonResponse|Response
     {
         $user = $this->pengguna($request);
         $bolehSemua = $user->punyaPeran(Role::ADMIN)
@@ -48,6 +53,27 @@ final class PengajuanIzinController extends Controller
             ->when($request->filled('dari'), fn ($q) => $q->whereDate('tanggal_selesai', '>=', $request->date('dari')))
             ->when($request->filled('sampai'), fn ($q) => $q->whereDate('tanggal_mulai', '<=', $request->date('sampai')))
             ->orderByDesc('tanggal_mulai');
+
+        $format = strtolower((string) $request->query('format', 'json'));
+        if (in_array($format, ['pdf', 'excel', 'xlsx'], true)) {
+            $format = $format === 'xlsx' ? 'excel' : $format;
+            $itemsSemua = $kueri->get();
+            $laporan = $this->susunLaporanEkspor($itemsSemua, $request);
+
+            return match ($format) {
+                'pdf' => $this->dokumen->pdf(
+                    $laporan,
+                    null,
+                    $this->dokumen->namaBerkas((string) $laporan['judul'], 'pdf'),
+                    'landscape',
+                ),
+                'excel' => $this->dokumen->xlsx(
+                    $laporan,
+                    $this->dokumen->namaBerkas((string) $laporan['judul'], 'xlsx'),
+                ),
+                default => response()->json(['data' => $laporan]),
+            };
+        }
 
         $daftar = $kueri->paginate($this->perHalaman($request));
 
@@ -181,5 +207,84 @@ final class PengajuanIzinController extends Controller
         }
 
         return response()->file($path);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, PengajuanIzin>  $pengajuan
+     * @return array<string, mixed>
+     */
+    private function susunLaporanEkspor($pengajuan, Request $request): array
+    {
+        $dari = $request->string('dari')->toString();
+        $sampai = $request->string('sampai')->toString();
+        $labelPeriode = 'Semua Waktu';
+        if ($dari !== '' && $sampai !== '') {
+            $labelPeriode = "{$dari} s.d. {$sampai}";
+        } elseif ($dari !== '') {
+            $labelPeriode = "Mulai {$dari}";
+        } elseif ($sampai !== '') {
+            $labelPeriode = "Sampai {$sampai}";
+        }
+
+        $baris = [];
+        $no = 1;
+        $totalHari = 0;
+        $hitungJenis = [
+            PengajuanIzin::JENIS_IZIN => 0,
+            PengajuanIzin::JENIS_SAKIT => 0,
+            PengajuanIzin::JENIS_DINAS => 0,
+            PengajuanIzin::JENIS_CUTI => 0,
+        ];
+        $hitungStatus = [
+            PengajuanIzin::STATUS_MENUNGGU => 0,
+            PengajuanIzin::STATUS_DISETUJUI => 0,
+            PengajuanIzin::STATUS_DITOLAK => 0,
+            PengajuanIzin::STATUS_DIBATALKAN => 0,
+        ];
+
+        foreach ($pengajuan as $p) {
+            $hari = ($p->tanggal_mulai && $p->tanggal_selesai)
+                ? (int) $p->tanggal_mulai->diffInDays($p->tanggal_selesai) + 1
+                : 1;
+
+            $totalHari += $hari;
+            if (isset($hitungJenis[$p->jenis])) {
+                $hitungJenis[$p->jenis]++;
+            }
+            if (isset($hitungStatus[$p->status])) {
+                $hitungStatus[$p->status]++;
+            }
+
+            $baris[] = [
+                (string) $no++,
+                (string) ($p->pegawai?->nip ?? '-'),
+                (string) ($p->pegawai?->nama ?? '-'),
+                (string) $p->labelJenis(),
+                (string) ($p->tanggal_mulai?->toDateString() ?? '-'),
+                (string) ($p->tanggal_selesai?->toDateString() ?? '-'),
+                (string) $hari,
+                (string) (PengajuanIzin::DAFTAR_STATUS[$p->status] ?? $p->status),
+                (string) ($p->alasan ?? '-'),
+                (string) ($p->diputuskanOleh?->name ?? '-'),
+            ];
+        }
+
+        return [
+            'kode' => 'FR-IZN-RP',
+            'judul' => 'Riwayat Pengajuan Izin Pegawai',
+            'periode' => $labelPeriode,
+            'kolom' => [
+                'No', 'NIP', 'Nama Pegawai', 'Jenis', 'Tanggal Mulai',
+                'Tanggal Selesai', 'Hari', 'Status', 'Alasan', 'Diputuskan Oleh',
+            ],
+            'baris' => $baris,
+            'ringkasan' => [
+                ['label' => 'Total Pengajuan', 'nilai' => count($baris)],
+                ['label' => 'Total Hari', 'nilai' => $totalHari],
+                ['label' => 'Disetujui', 'nilai' => $hitungStatus[PengajuanIzin::STATUS_DISETUJUI] ?? 0],
+                ['label' => 'Menunggu', 'nilai' => $hitungStatus[PengajuanIzin::STATUS_MENUNGGU] ?? 0],
+                ['label' => 'Ditolak', 'nilai' => $hitungStatus[PengajuanIzin::STATUS_DITOLAK] ?? 0],
+            ],
+        ];
     }
 }

@@ -318,3 +318,16 @@ it('membatasi riwayat pengajuan pada milik sendiri untuk pegawai (FR-IZN-09)', f
     // Pemantau melihat semua.
     $this->actingAs(sebagaiAdmin())->getJson('/api/v1/pengajuan-izin')->assertOk()->assertJsonPath('meta.total', 2);
 });
+
+it('dapat mengekspor riwayat pengajuan izin ke format pdf dan excel', function (): void {
+    $admin = sebagaiAdmin();
+    PengajuanIzin::factory()->count(2)->create();
+
+    $pdfResp = $this->actingAs($admin)->get('/api/v1/pengajuan-izin?format=pdf');
+    $pdfResp->assertOk();
+    $pdfResp->assertHeader('content-type', 'application/pdf');
+
+    $excelResp = $this->actingAs($admin)->get('/api/v1/pengajuan-izin?format=excel');
+    $excelResp->assertOk();
+    expect($excelResp->headers->get('content-type'))->toContain('spreadsheetml.sheet');
+});
