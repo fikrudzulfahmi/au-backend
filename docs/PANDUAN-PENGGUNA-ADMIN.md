@@ -282,9 +282,14 @@ berlaku token.
 - **Persetujuan presensi luar radius** (Jalur B) oleh admin/kepala sekolah.
   Status masuk (`hadir`/`terlambat`) dihitung dari **waktu presensi dikirim**,
   bukan waktu persetujuan (BR-18, K-43).
-- **Koreksi manual** (mis. lupa presensi pulang, gangguan sistem) **wajib
+- **Koreksi manual** (mis. lupa presensi masuk/pulang, gangguan sistem) **wajib
   disertai alasan** dan dicatat di `audit_log`; data ditandai
-  `dikoreksi_admin = true` (FR-PRS-13, K-67).
+  `dikoreksi_admin = true` (FR-PRS-13, K-67). Kedua sisi boleh dikoreksi:
+  `masuk_waktu` dan/atau `pulang_waktu` (kirim `HH:MM`, server menempelkannya ke
+  tanggal presensi). Status `masuk_status`/`masuk_menit_terlambat` dan
+  `pulang_status`/`pulang_menit_cepat` dihitung ulang dari jam kerja/WFA, kecuali
+  admin mengirim statusnya sendiri. Jam pulang tidak boleh lebih awal dari jam
+  masuk, dan jam pulang baru hanya boleh diisi bila jam masuk sudah ada.
 
 ### Pengajuan izin/sakit/dinas/cuti
 

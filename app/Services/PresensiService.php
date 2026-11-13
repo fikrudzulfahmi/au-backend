@@ -241,8 +241,14 @@ final class PresensiService
     }
 
     /**
-     * FR-PRS-13 — koreksi manual oleh admin (lupa pulang, gangguan sistem).
+     * FR-PRS-13 — koreksi manual oleh admin (lupa masuk/pulang, gangguan sistem).
      * Wajib beralasan dan ditandai `dikoreksi_admin`.
+     *
+     * Kedua sisi waktu (masuk & pulang) boleh dikoreksi. Status turunan
+     * (`masuk_status`/`masuk_menit_terlambat`, `pulang_status`/`pulang_menit_cepat`)
+     * dihitung ulang dari jam kerja/WFA supaya angka keterlambatan tidak berbohong
+     * setelah jamnya diubah, dan validasi yang masih kosong dianggap `valid` karena
+     * admin sudah memastikan kejadiannya.
      */
     public function koreksi(PresensiPegawai $presensi, array $data, User $oleh, string $alasan): PresensiPegawai
     {
@@ -251,8 +257,8 @@ final class PresensiService
         }
 
         $lama = $presensi->only([
-            'masuk_waktu', 'masuk_status', 'masuk_validasi',
-            'pulang_waktu', 'pulang_status', 'pulang_validasi',
+            'masuk_waktu', 'masuk_status', 'masuk_menit_terlambat', 'masuk_validasi',
+            'pulang_waktu', 'pulang_status', 'pulang_menit_cepat', 'pulang_validasi',
         ]);
 
         return DB::transaction(function () use ($presensi, $data, $alasan, $lama, $oleh): PresensiPegawai {
@@ -269,6 +275,8 @@ final class PresensiService
                 }
             }
 
+            $perubahan = $this->turunanWaktuKoreksi($presensi, $perubahan);
+
             $presensi->fill($perubahan)->save();
 
             // Koreksi wajib terekam lengkap dengan alasannya (FR-PRS-13).
@@ -279,6 +287,92 @@ final class PresensiService
 
             return $presensi->refresh();
         });
+    }
+
+    /**
+     * Menormalkan jam koreksi ke tanggal presensi lalu menghitung ulang status turunannya.
+     *
+     * Klien hanya mengirim `HH:MM` (baris presensi sudah terikat satu tanggal), tetapi
+     * API juga harus tahan menerima datetime penuh. Tanpa penormalan ini jam kiriman
+     * perangkat bisa tersimpan pada tanggal lain dan merusak laporan bulanan.
+     *
+     * @param  array<string, mixed>  $perubahan
+     * @return array<string, mixed>
+     */
+    private function turunanWaktuKoreksi(PresensiPegawai $presensi, array $perubahan): array
+    {
+        $tanggal = $presensi->tanggal?->toDateString();
+        $zona = config('app.timezone');
+
+        if ($tanggal === null) {
+            return $perubahan;
+        }
+
+        /** @var array<string, CarbonImmutable> $waktu */
+        $waktu = [];
+
+        foreach (['masuk', 'pulang'] as $sisi) {
+            $kolom = $sisi.'_waktu';
+
+            if (! array_key_exists($kolom, $perubahan)) {
+                continue;
+            }
+
+            $nilai = $perubahan[$kolom];
+
+            if ($nilai instanceof \DateTimeInterface) {
+                $jam = CarbonImmutable::instance($nilai)->setTimezone($zona)->format('H:i:s');
+            } elseif (is_string($nilai)) {
+                $jam = CarbonImmutable::parse($nilai, $zona)->format('H:i:s');
+            } else {
+                continue;
+            }
+
+            $waktu[$sisi] = CarbonImmutable::createFromFormat('Y-m-d H:i:s', $tanggal.' '.$jam, $zona);
+            $perubahan[$kolom] = $waktu[$sisi];
+        }
+
+        if (isset($waktu['masuk'], $waktu['pulang']) && $waktu['pulang']->lessThan($waktu['masuk'])) {
+            throw AturanBisnisException::tolak(
+                'Jam pulang tidak boleh lebih awal dari jam masuk.',
+                'pulang_waktu',
+                'URUTAN-WAKTU',
+            );
+        }
+
+        $pegawai = $presensi->pegawai;
+
+        if ($pegawai === null) {
+            return $perubahan;
+        }
+
+        // Status hanya ditimpa bila admin tidak mengirimkannya sendiri: keputusan
+        // manual admin (mis. menandai hadir walau lewat jam masuk) tetap menang.
+        if (isset($waktu['masuk'])) {
+            if (! array_key_exists('masuk_status', $perubahan)) {
+                $status = $this->statusMasuk($pegawai, $waktu['masuk']);
+                $perubahan['masuk_status'] = $status['status'];
+                $perubahan['masuk_menit_terlambat'] = $status['menit'];
+            }
+
+            if (! array_key_exists('masuk_validasi', $perubahan)) {
+                $perubahan['masuk_validasi'] = PresensiPegawai::VALID;
+            }
+        }
+
+        if (isset($waktu['pulang'])) {
+            if (! array_key_exists('pulang_status', $perubahan)) {
+                $status = $this->statusPulang($pegawai, $waktu['pulang']);
+                $perubahan['pulang_status'] = $status['status'];
+                $perubahan['pulang_menit_cepat'] = $status['menit'];
+            }
+
+            if (! array_key_exists('pulang_validasi', $perubahan)) {
+                $perubahan['pulang_validasi'] = PresensiPegawai::VALID;
+            }
+        }
+
+        return $perubahan;
     }
 
     /**

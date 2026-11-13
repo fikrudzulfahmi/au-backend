@@ -144,7 +144,13 @@ final class MonitoringPresensiController extends Controller
         ]);
     }
 
-    /** FR-PRS-13 — koreksi manual presensi, wajib beralasan. */
+    /**
+     * FR-PRS-13 — koreksi manual presensi, wajib beralasan.
+     *
+     * Boleh satu sisi saja (mis. hanya jam masuk yang lupa diisi) atau keduanya.
+     * Nilai `null` dibuang oleh service, sehingga kiriman kosong tidak menghapus
+     * data yang sudah ada — penghapusan sengaja tidak didukung.
+     */
     public function koreksi(KoreksiPresensiRequest $request, PresensiPegawai $presensi): JsonResponse
     {
         $data = $request->validated();

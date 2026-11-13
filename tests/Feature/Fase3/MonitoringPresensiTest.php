@@ -272,6 +272,59 @@ it('mencatat koreksi manual presensi oleh admin (FR-PRS-13)', function (): void 
     $this->assertDatabaseHas('audit_log', ['aksi' => 'koreksi_presensi']);
 });
 
+/** FR-PRS-13 — jam DATANG juga boleh dikoreksi, status keterlambatan ikut dihitung ulang. */
+it('mengoreksi jam masuk dan menghitung ulang keterlambatan (FR-PRS-13)', function (): void {
+    $this->travelTo(CarbonImmutable::parse(seninUji().' 16:00:00'));
+
+    $p = siapkanPresensi();
+    $presensi = PresensiPegawai::factory()->terlambat(40)->create([
+        'pegawai_id' => $p['pegawai']->id,
+        'tanggal' => seninUji(),
+    ]);
+
+    expect($presensi->masuk_status)->toBe(PresensiPegawai::STATUS_TERLAMBAT);
+
+    // Kirim jam saja (bentuk yang dikirim UI): dinormalkan ke tanggal presensi.
+    $this->actingAs(sebagaiAdmin())->patchJson("/api/v1/monitoring/presensi-harian/{$presensi->id}/koreksi", [
+        'masuk_waktu' => '06:55',
+        'alasan' => 'Mesin presensi mati pagi ini, dikonfirmasi piket.',
+    ])->assertOk();
+
+    $presensi->refresh();
+    expect($presensi->masuk_waktu->format('Y-m-d H:i:s'))->toBe(seninUji().' 06:55:00')
+        ->and($presensi->masuk_status)->toBe(PresensiPegawai::STATUS_HADIR)
+        ->and($presensi->masuk_menit_terlambat)->toBe(0)
+        ->and($presensi->masuk_validasi)->toBe(PresensiPegawai::VALID)
+        ->and($presensi->dikoreksi_admin)->toBeTrue();
+});
+
+/** FR-PRS-13 — koreksi jam masuk tidak boleh merusak jam pulang yang sudah ada. */
+it('menolak koreksi jam masuk yang melewati jam pulang (FR-PRS-13)', function (): void {
+    $this->travelTo(CarbonImmutable::parse(seninUji().' 16:00:00'));
+
+    $p = siapkanPresensi();
+    $presensi = PresensiPegawai::factory()->create([
+        'pegawai_id' => $p['pegawai']->id,
+        'tanggal' => seninUji(),
+        'pulang_waktu' => seninUji().' 15:05:00',
+        'pulang_status' => PresensiPegawai::PULANG_NORMAL,
+        'pulang_validasi' => PresensiPegawai::VALID,
+    ]);
+
+    $this->actingAs(sebagaiAdmin())->patchJson("/api/v1/monitoring/presensi-harian/{$presensi->id}/koreksi", [
+        'masuk_waktu' => '16:00',
+        'alasan' => 'Mencoba jam masuk setelah jam pulang.',
+    ])->assertStatus(422)->assertJsonValidationErrors('pulang_waktu');
+
+    // Tanggal lain juga ditolak: koreksi hanya untuk tanggal presensi itu.
+    $this->actingAs(sebagaiAdmin())->patchJson("/api/v1/monitoring/presensi-harian/{$presensi->id}/koreksi", [
+        'masuk_waktu' => '2020-01-06 07:00:00',
+        'alasan' => 'Mencoba tanggal lain yang tidak sesuai.',
+    ])->assertStatus(422)->assertJsonValidationErrors('masuk_waktu');
+
+    expect($presensi->refresh()->masuk_waktu->toDateString())->toBe(seninUji());
+});
+
 /** FR-PRS-11 — aksi massal pada antrean persetujuan. */
 it('memutuskan banyak presensi sekaligus (FR-PRS-11 massal)', function (): void {
     $this->travelTo(CarbonImmutable::parse(seninUji().' 10:00:00'));
