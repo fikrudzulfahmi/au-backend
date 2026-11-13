@@ -16,6 +16,7 @@ use App\Services\Laporan\DokumenResmiService;
 use App\Services\PengajuanService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -210,7 +211,7 @@ final class PengajuanIzinController extends Controller
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, PengajuanIzin>  $pengajuan
+     * @param  Collection<int, PengajuanIzin>  $pengajuan
      * @return array<string, mixed>
      */
     private function susunLaporanEkspor($pengajuan, Request $request): array

@@ -7,7 +7,6 @@ namespace App\Services;
 use App\Exceptions\AturanBisnisException;
 use App\Models\HariLibur;
 use App\Models\JadwalWfa;
-use App\Models\KecualiWfa;
 use App\Models\JamKerja;
 use App\Models\LokasiPresensi;
 use App\Models\Pegawai;
@@ -64,7 +63,6 @@ final class PresensiService
 
         $this->pastikanHariKerja($pegawai, $sekarang);
         $this->pastikanIzinTidakMembebaskan($pegawai, $tanggal);
-        $this->pastikanWfaTidakMembebaskan($pegawai, $sekarang);
 
         $presensi = PresensiPegawai::query()
             ->where('pegawai_id', $pegawai->getKey())
@@ -304,12 +302,7 @@ final class PresensiService
             ->first();
 
         $izin = $this->izinMembebaskan($pegawai, $tanggal);
-        $kecuali = KecualiWfa::query()
-            ->where('pegawai_id', $pegawai->getKey())
-            ->whereDate('tanggal', $tanggal)
-            ->first();
         $wfa = $this->wfa->untuk($pegawai->getKey(), $sekarang->dayOfWeekIso);
-        $wfaPenuh = $wfa !== null && $wfa->isPenuh();
         $wfaSebagian = $wfa !== null && $wfa->isSebagian();
 
         $bolehMasuk = true;
@@ -318,12 +311,6 @@ final class PresensiService
         if ($izin !== null) {
             $bolehMasuk = false;
             $alasanMasuk = 'Hari ini tercatat '.$izin->labelJenis().' yang disetujui — presensi tidak diperlukan.';
-        } elseif ($kecuali !== null) {
-            $bolehMasuk = $kecuali->jenis === 'masuk_kantor';
-            $alasanMasuk = $bolehMasuk ? null : 'Hari ini ada kecualian WFA: '.$kecuali->jenis.'.';
-        } elseif ($wfaPenuh) {
-            $bolehMasuk = false;
-            $alasanMasuk = 'Hari ini Anda dijadwalkan WFA Penuh — presensi tidak diperlukan.';
         } elseif ($aturan === null || ! $aturan->is_hari_kerja) {
             $bolehMasuk = false;
             $alasanMasuk = 'Hari ini bukan hari kerja menurut jam kerja.';
@@ -479,32 +466,6 @@ final class PresensiService
                 'Hari ini Anda tercatat '.$izin->labelJenis().' yang disetujui, sehingga presensi tidak diperlukan.',
                 'foto',
                 'BR-25',
-            );
-        }
-    }
-
-    /**
-     * WFA penuh — seperti izin/sakit/cuti: presensi tidak diperlukan pada hari itu.
-     * WFA sebagian TIDAK membebaskan; ia hanya menggeser batas jam masuk.
-     */
-    private function pastikanWfaTidakMembebaskan(Pegawai $pegawai, CarbonImmutable $sekarang): void
-    {
-        $kecuali = KecualiWfa::query()
-            ->where('pegawai_id', $pegawai->getKey())
-            ->whereDate('tanggal', $sekarang->toDateString())
-            ->first();
-
-        if ($kecuali !== null && $kecuali->jenis === 'masuk_kantor') {
-            return;
-        }
-
-        $wfa = $this->wfa->untuk($pegawai->getKey(), $sekarang->dayOfWeekIso);
-
-        if ($wfa !== null && $wfa->isPenuh()) {
-            throw AturanBisnisException::tolak(
-                'Hari ini Anda dijadwalkan WFA Penuh, sehingga presensi tidak diperlukan.',
-                'foto',
-                'WFA-PENUH',
             );
         }
     }

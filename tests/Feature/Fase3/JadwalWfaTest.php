@@ -14,8 +14,8 @@ beforeEach(function (): void {
     Storage::fake('local');
 });
 
-/** FR-WFA — WFA Penuh membebaskan presensi (opsi a). */
-it('menolak presensi saat pegawai dijadwalkan WFA Penuh hari ini', function (): void {
+/** FR-WFA — WFA Penuh TIDAK membebaskan presensi: presensi biasa tetap diterima. */
+it('menerima presensi biasa saat pegawai dijadwalkan WFA Penuh hari ini', function (): void {
     $this->travelTo(CarbonImmutable::parse(seninUji().' 07:00:00'));
     $p = siapkanPresensi();
 
@@ -30,13 +30,14 @@ it('menolak presensi saat pegawai dijadwalkan WFA Penuh hari ini', function (): 
 
     $respons = kirimPresensi($p['user']);
 
-    $respons->assertStatus(422);
-    expect($respons->json('code'))->toBe('WFA-PENUH')
-        ->and(PresensiPegawai::count())->toBe(0);
+    $respons->assertCreated()
+        ->assertJsonPath('data.masuk.status', PresensiPegawai::STATUS_HADIR);
+
+    expect(PresensiPegawai::count())->toBe(1);
 });
 
-/** FR-WFA — status hari ini menandai tidak boleh masuk bila WFA Penuh. */
-it('mengembalikan boleh_masuk false dan keterangan WFA penuh di status hari ini', function (): void {
+/** FR-WFA — status hari ini tetap membolehkan masuk walau dijadwalkan WFA Penuh. */
+it('mengembalikan boleh_masuk true walau pegawai dijadwalkan WFA Penuh', function (): void {
     $this->travelTo(CarbonImmutable::parse(seninUji().' 07:00:00'));
     $p = siapkanPresensi();
 
@@ -51,7 +52,7 @@ it('mengembalikan boleh_masuk false dan keterangan WFA penuh di status hari ini'
     $respons = $this->actingAs($p['user'])->get('/api/v1/presensi/hari-ini');
 
     $respons->assertOk()
-        ->assertJsonPath('data.boleh_masuk', false)
+        ->assertJsonPath('data.boleh_masuk', true)
         ->assertJsonPath('data.wfa.jenis', 'penuh');
 });
 
@@ -103,7 +104,7 @@ it('mengizinkan admin mengelola jadwal WFA satu pegawai', function (): void {
     $admin = buatPegawaiDenganAkun(Pegawai::JENIS_GURU, [], [Role::ADMIN]);
     $guru = buatPegawaiDenganAkun(Pegawai::JENIS_GURU);
 
-    $respons = $this->actingAs($admin)->postJson('/api/v1/pengaturan/jadwal-wfa', [
+    $respons = $this->actingAs($admin)->postJson('/api/v1/jadwal-wfa', [
         'pegawai_id' => $guru->pegawai_id,
         'per_hari' => [
             1 => [

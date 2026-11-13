@@ -34,8 +34,6 @@ final class MonitoringPresensiService
 
     public const TIDAK_PRESENSI_PULANG = 'tidak_presensi_pulang';
 
-    public const WFA = 'wfa';
-
     /** @var array<string, string> */
     public const DAFTAR_STATUS = [
         self::BELUM_PRESENSI => 'Belum Presensi',
@@ -45,7 +43,6 @@ final class MonitoringPresensiService
         self::MENUNGGU => 'Menunggu Persetujuan',
         self::LUAR_RADIUS => 'Luar Radius',
         self::TIDAK_PRESENSI_PULANG => 'Tidak Presensi Pulang',
-        self::WFA => 'WFA',
     ];
 
     public function __construct(private readonly JamKerjaService $jamKerja) {}
@@ -185,12 +182,12 @@ final class MonitoringPresensiService
 
     /** Kategori status satu pegawai (FR-PRS-10). */
     private function kategori(
-            ?PresensiPegawai $presensi,
-            ?PengajuanIzin $izin,
-            bool $hariKerja,
-            bool $libur,
-            ?JadwalWfa $wfa = null
-        ): string {
+        ?PresensiPegawai $presensi,
+        ?PengajuanIzin $izin,
+        bool $hariKerja,
+        bool $libur,
+        ?JadwalWfa $wfa = null
+    ): string {
         // Hari libur atau bukan hari kerja: tidak ada kewajiban presensi.
         if ($libur || ! $hariKerja) {
             return $presensi?->sudahMasuk() ? self::HADIR : self::BELUM_PRESENSI;
@@ -201,11 +198,9 @@ final class MonitoringPresensiService
             return self::BERHALANGAN;
         }
 
-        // BR-WFA-01 — jika hari ini WFA penuh, presensi dibebaskan, status WFA (bukan alpa).
-        if ($wfa !== null && $wfa->isPenuh()) {
-            return self::WFA;
-        }
-
+        // BR-WFA-01 — WFA Penuh tidak lagi membebaskan presensi. Pegawai yang
+        // dijadwalkan WFA tetap wajib presensi dan tetap dinilai seperti hari kerja
+        // biasa; badge WFA di baris hanya menjelaskan konteks jadwalnya.
         if ($presensi === null || ! $presensi->sudahMasuk()) {
             return self::BELUM_PRESENSI;
         }

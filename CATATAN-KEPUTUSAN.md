@@ -289,3 +289,23 @@ Pelajaran yang berlaku umum: **citra/berkas uji untuk pengujian kompresi harus d
 **Petunjuk yang tersisa dan belum diuji.** Keluaran kegagalan memperlihatkan teks hasil ekstraksi dipenuhi byte `0x3F` (`?`) — pola khas `mb_strtoupper(..., 'UTF-8')` yang mengganti byte tidak sah UTF-8. Artinya pada run yang gagal, sebagian isi bukan teks melainkan byte biner mentah: ada aliran yang gagal dikembangkan lalu ikut terbaca. Dugaan berikutnya: `gzuncompress`/`gzinflate` sesekali gagal karena rentang aliran yang tertangkap tidak persis (mis. perbedaan akhir baris), dan itu bergantung pada isi PDF yang berubah tiap pencetakan karena memuat tanggal pembuatan.
 
 **Status:** perbaikan struktural sudah masuk dan suite hijau (355 lulus / 1449 assertion, Pint 304 berkas), tetapi karena penyebab pastinya belum terbukti, **flaky ini bisa muncul lagi**. Bila muncul, langkah pertama: cetak `strlen($urai)` per aliran pada run yang gagal, dan bandingkan jumlah aliran yang berhasil dikembangkan antara run hijau dan run merah.
+
+## O. Perubahan 13 Nov 2026 — WFA tidak lagi membebaskan presensi; kecualian WFA dihapus
+
+**Keputusan.** Pegawai yang dijadwalkan WFA (penuh maupun sebagian) **tetap wajib presensi** dan dinilai seperti hari kerja biasa. Fitur **kecualian WFA** (pengecualian per tanggal: masuk kantor/dinas/izin/cuti) dihapus seluruhnya.
+
+**Yang berubah:**
+
+| Lapis | Perubahan |
+|---|---|
+| `PresensiService::masuk()` | `pastikanWfaTidakMembebaskan()` dihapus — tidak ada lagi penolakan berkode `WFA-PENUH`. |
+| `PresensiService::statusHariIni()` | Blok `elseif ($kecuali !== null)` dan `elseif ($wfaPenuh)` dihapus; `boleh_masuk` tidak lagi dimatikan oleh WFA. `wfa` dan `jam_masuk_standar` tetap dikirim sebagai konteks (WFA sebagian masih menggeser batas masuk). |
+| `MonitoringPresensiService` | Kategori `wfa` dihapus dari `DAFTAR_STATUS`; hari WFA tanpa presensi kini `belum_presensi` (bukan status bebas). Parameter `?JadwalWfa` pada `kategori()` dipertahankan hanya untuk badge konteks di baris. |
+| `LaporanPresensiService` | Kolom `WFA` dihapus dari rekap dan matriks; `persen_kehadiran` kembali dihitung atas **seluruh** hari kerja (tidak lagi dibagi `hari_kerja - wfa`). WFA tanpa presensi dihitung **alpa**. |
+| `PresensiController::hariIni()` | Menambahkan `jam_masuk_standar` dan `wfa` yang sebelumnya tidak pernah dikirim ke klien padahal sudah ada di service (frontend membacanya). |
+| Backend kecualian | `KecualiWfaController`, model `KecualiWfa`, 4 rute `/presensi/kecuali*`, dan migrasi pembuat tabel dihapus. Migrasi baru `2026_11_13_090000_drop_kecuali_wfa_table` menjatuhkan tabel pada basis data yang sudah pernah menjalankannya. |
+| Frontend | Varian badge `wfa` dihapus dari `StatusBadge` dan `VARIAN_KATEGORI`; teks panduan `PengaturanWfaPage` diperbaiki (WFA penuh tidak lagi membebaskan presensi). |
+
+**Catatan penghitungan.** Karena WFA penuh tidak lagi membebaskan, pegawai yang dijadwalkan WFA dan tidak presensi akan muncul sebagai **alpa** pada monitoring dan laporan. Ini konsekuensi langsung dari keputusan, bukan cacat.
+
+**Verifikasi.** Suite penuh `pest` (dijalankan dalam kontainer `php 8.4` dengan MariaDB 10.11 bersih): **450 lulus / 1913 assertion**. `pint --test` 336 berkas bersih. `tsc -b` frontend bersih.

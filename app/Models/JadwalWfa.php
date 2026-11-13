@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Jadwal WFA (Work From Anywhere) per pegawai per hari.
  *
- * - `penuh`    — membebaskan presensi; monitoring menampilkan badge "WFA Penuh".
+ * - `penuh`    — penanda konteks kerja; presensi TETAP wajib dan dinilai normal.
  * - `sebagian` — jam masuk digeser; terlambat dihitung dari `jam_masuk` WFA.
  */
 class JadwalWfa extends Model

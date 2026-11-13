@@ -40,6 +40,10 @@ final class PresensiController extends Controller
                 'buka_presensi' => $status['buka_presensi'],
                 'jam_masuk' => $status['jam_masuk'],
                 'jam_pulang' => $status['jam_pulang'],
+                // WFA sebagian menggeser batas masuk; UI perlu tahu jadwal WFA hari ini
+                // untuk menjelaskan selisih terhadap `jam_masuk_standar`.
+                'jam_masuk_standar' => $status['jam_masuk_standar'],
+                'wfa' => $status['wfa'],
                 'boleh_masuk' => $status['boleh_masuk'],
                 'alasan_tidak_boleh_masuk' => $status['alasan_tidak_boleh_masuk'],
                 'boleh_pulang' => $status['boleh_pulang'],

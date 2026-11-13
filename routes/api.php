@@ -28,7 +28,6 @@ use App\Http\Controllers\Api\V1\Pengumuman\PengumumanController;
 use App\Http\Controllers\Api\V1\Plotting\PlottingKelasController;
 use App\Http\Controllers\Api\V1\Plotting\PlottingMapelController;
 use App\Http\Controllers\Api\V1\Presensi\JamKerjaController;
-use App\Http\Controllers\Api\V1\Presensi\KecualiWfaController;
 use App\Http\Controllers\Api\V1\Presensi\LokasiPresensiController;
 use App\Http\Controllers\Api\V1\Presensi\MonitoringPresensiController;
 use App\Http\Controllers\Api\V1\Presensi\PengajuanIzinController;
@@ -276,10 +275,6 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/masuk', [PresensiController::class, 'masuk']);
             Route::post('/pulang', [PresensiController::class, 'pulang']);
             Route::get('/riwayat', [PresensiController::class, 'riwayat']);
-            Route::get('/kecuali', [KecualiWfaController::class, 'index'])->middleware('peran:admin');
-            Route::post('/kecuali', [KecualiWfaController::class, 'store'])->middleware('peran:admin');
-            Route::delete('/kecuali/{kecualiWfa}', [KecualiWfaController::class, 'destroy'])->middleware('peran:admin');
-            Route::post('/kecuali/{kecualiWfa}/hapus', [KecualiWfaController::class, 'destroy'])->middleware('peran:admin');
 
             // Foto disimpan di disk privat; penyajiannya tetap melewati otorisasi.
             Route::get('/{presensi}/foto/{sisi}', [PresensiController::class, 'foto'])
